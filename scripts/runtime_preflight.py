@@ -9,6 +9,11 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+from artifact_integrity import (
+    png_metadata,
+    resolve_in_workspace,
+    sha256_file,
+)
 from validate_project import ValidationError
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -77,10 +82,7 @@ def validate_image_file(path: Path) -> tuple[bool, str]:
 
 
 def _resolve(base_dir: Path, raw_path: str) -> Path:
-    candidate = Path(raw_path)
-    if candidate.is_absolute():
-        return candidate
-    return base_dir / candidate
+    return resolve_in_workspace(base_dir, raw_path)
 
 
 def _selected_reference_ids(edit: dict[str, Any]) -> list[str]:
@@ -136,7 +138,7 @@ def run_preflight(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Check real inputs before allowing a host image action."""
-    base_dir = Path(base_dir)
+    base_dir = Path(base_dir).expanduser().resolve()
     sufficiency = evaluate_reference_sufficiency(edit)
 
     if sufficiency["status"] == "insufficient":
@@ -146,7 +148,35 @@ def run_preflight(
             "reason_code": "reference_sufficiency_failed",
             "checks": [],
             "reference_sufficiency": sufficiency,
+            "workspace_root": str(base_dir),
         }
+
+    refs = {ref["id"]: ref for ref in asset.get("references", [])}
+    selected_ids = _selected_reference_ids(edit)
+    target_id = edit.get("execution", {}).get("edit_target_reference_id")
+
+    ordered_ids: list[str] = []
+    if target_id:
+        ordered_ids.append(target_id)
+    for ref_id in selected_ids:
+        if ref_id not in ordered_ids:
+            ordered_ids.append(ref_id)
+
+    for ref_id in ordered_ids:
+        ref = refs.get(ref_id)
+        if ref is not None:
+            try:
+                _resolve(base_dir, ref["path"])
+            except ValidationError as exc:
+                return {
+                    "status": "BLOCKED",
+                    "dry_run": dry_run,
+                    "reason_code": "path_outside_workspace",
+                    "checks": [],
+                    "reference_sufficiency": sufficiency,
+                    "workspace_root": str(base_dir),
+                    "detail": str(exc),
+                }
 
     if dry_run:
         return {
@@ -155,19 +185,10 @@ def run_preflight(
             "reason_code": None,
             "checks": [],
             "reference_sufficiency": sufficiency,
+            "workspace_root": str(base_dir),
         }
 
-    refs = {ref["id"]: ref for ref in asset.get("references", [])}
-    selected_ids = _selected_reference_ids(edit)
-    target_id = edit.get("execution", {}).get("edit_target_reference_id")
     checks: list[dict[str, Any]] = []
-
-    ordered_ids: list[str] = []
-    if target_id:
-        ordered_ids.append(target_id)
-    for ref_id in selected_ids:
-        if ref_id not in ordered_ids:
-            ordered_ids.append(ref_id)
 
     for ref_id in ordered_ids:
         ref = refs.get(ref_id)
@@ -182,6 +203,7 @@ def run_preflight(
                 ),
                 "checks": checks,
                 "reference_sufficiency": sufficiency,
+                "workspace_root": str(base_dir),
             }
 
         resolved = _resolve(base_dir, ref["path"])
@@ -198,6 +220,7 @@ def run_preflight(
                 ),
                 "checks": checks,
                 "reference_sufficiency": sufficiency,
+                "workspace_root": str(base_dir),
                 "path": str(resolved),
             }
         if not resolved.is_file() or not os.access(resolved, os.R_OK):
@@ -207,6 +230,7 @@ def run_preflight(
                 "reason_code": "reference_unreadable",
                 "checks": checks,
                 "reference_sufficiency": sufficiency,
+                "workspace_root": str(base_dir),
                 "path": str(resolved),
             }
 
@@ -218,8 +242,24 @@ def run_preflight(
                 "reason_code": "reference_image_invalid",
                 "checks": checks,
                 "reference_sufficiency": sufficiency,
+                "workspace_root": str(base_dir),
                 "path": str(resolved),
                 "detail": detail,
+            }
+
+        actual_sha256 = sha256_file(resolved)
+        declared_sha256 = ref.get("content_sha256")
+        if declared_sha256 is not None and declared_sha256 != actual_sha256:
+            return {
+                "status": "BLOCKED",
+                "dry_run": False,
+                "reason_code": "reference_digest_mismatch",
+                "checks": checks,
+                "reference_sufficiency": sufficiency,
+                "workspace_root": str(base_dir),
+                "path": str(resolved),
+                "expected_sha256": declared_sha256,
+                "actual_sha256": actual_sha256,
             }
 
         checks.append(
@@ -229,6 +269,8 @@ def run_preflight(
                 "kind": "edit_target" if is_target else "support_reference",
                 "status": "PASS",
                 "format": detail,
+                "sha256": actual_sha256,
+                "png": png_metadata(resolved),
             }
         )
 
@@ -238,4 +280,5 @@ def run_preflight(
         "reason_code": None,
         "checks": checks,
         "reference_sufficiency": sufficiency,
+        "workspace_root": str(base_dir),
     }

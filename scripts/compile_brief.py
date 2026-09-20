@@ -116,8 +116,14 @@ def compile_brief(asset: dict[str, Any], edit: dict[str, Any]) -> str:
         lines.extend(["", "REQUIRED COMPONENTS:"])
         for component in topology["required_components"]:
             lines.append(
-                f"- {component['id']} | count={component['count']}"
+                f"- {component['id']} | count={component['count']} | "
+                f"count_unit={component['count_unit']} | "
+                f"visual_definition={component['visual_definition']}"
             )
+            if component["excludes"]:
+                lines.append(
+                    "  excludes: " + ", ".join(component["excludes"])
+                )
 
     if topology["structural_relationships"]:
         lines.extend(["", "STRUCTURAL RELATIONSHIPS:"])
@@ -136,6 +142,11 @@ def compile_brief(asset: dict[str, Any], edit: dict[str, Any]) -> str:
                 "- Do not add undeclared structural components.",
             ]
         )
+        if topology["allowed_visible_details"]:
+            lines.append(
+                "- Allowed visible details that are not structural components: "
+                + ", ".join(topology["allowed_visible_details"])
+            )
 
     if provisional_fields:
         lines.extend(["", "PROVISIONAL / UNKNOWN FIELDS:"])

@@ -9,9 +9,19 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from artifact_integrity import (
+    packet_digest,
+    resolve_in_workspace,
+    workspace_relative,
+)
 from compile_brief import compile_brief
 from compile_repair import compile_repair_brief
-from execution_loop import load_run, validate_run_state
+from execution_loop import (
+    _exclusive_run_lock,
+    load_run,
+    save_run,
+    validate_run_state,
+)
 from runtime_preflight import evaluate_reference_sufficiency
 from topology_contract import packet_topology
 from validate_project import (
@@ -86,8 +96,7 @@ def _knowledge_packet(
         authoritative.append(
             {
                 "kind": "component",
-                "id": component["id"],
-                "count": component["count"],
+                **component,
             }
         )
     for relation in topology["structural_relationships"]:
@@ -118,6 +127,53 @@ def _budget_packet(run: dict[str, Any]) -> dict[str, int]:
     }
 
 
+def _auditable_input_bindings(
+    asset: dict[str, Any],
+    edit: dict[str, Any],
+    run: dict[str, Any],
+) -> list[dict[str, Any]]:
+    checks = list((run.get("preflight") or {}).get("checks", []))
+    roles_by_id = {
+        binding["reference_id"]: list(binding.get("roles", []))
+        for binding in edit.get("reference_bindings", [])
+    }
+    bindings = [
+        {
+            "reference_id": check["reference_id"],
+            "kind": check["kind"],
+            "path": workspace_relative(
+                run["workspace_root"], check["path"]
+            ),
+            "resolved_path": str(
+                resolve_in_workspace(run["workspace_root"], check["path"])
+            ),
+            "roles": roles_by_id.get(check["reference_id"], []),
+            "sha256": check["sha256"],
+            "png": check["png"],
+        }
+        for check in checks
+    ]
+    if run["state"] == "REPAIR_READY":
+        receipt = run.get("current_receipt")
+        if not receipt:
+            raise ValidationError("auditable repair has no current receipt")
+        repaired = {
+            "kind": "edit_target",
+            "path": receipt["result"]["path"],
+            "resolved_path": str(
+                resolve_in_workspace(
+                    run["workspace_root"], receipt["result"]["path"]
+                )
+            ),
+            "sha256": receipt["result_sha256"],
+            "png": receipt["result"]["png"],
+        }
+        for binding in bindings:
+            binding["kind"] = "support_reference"
+        bindings.insert(0, repaired)
+    return bindings
+
+
 def build_action_packet(
     asset: dict[str, Any],
     edit: dict[str, Any],
@@ -141,9 +197,11 @@ def build_action_packet(
         or evaluate_reference_sufficiency(edit)
     )
 
+    auditable = bool(run.get("auditable", False))
     packet: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3 if auditable else 2,
         "run_id": run["run_id"],
+        "iteration": run["iteration"],
         "state": state,
         "asset_id": run["asset_id"],
         "request_id": run["request_id"],
@@ -179,6 +237,9 @@ def build_action_packet(
         result_path = run.get("current_result_path")
         if not result_path:
             raise ValidationError("QA_PENDING run has no current_result_path")
+        current_receipt = run.get("current_receipt") if auditable else None
+        if auditable and not current_receipt:
+            raise ValidationError("auditable QA has no current receipt")
         packet.update(
             {
                 "action": "visual_qa",
@@ -206,6 +267,14 @@ def build_action_packet(
                 "after_success": "apply_qa",
             }
         )
+        if current_receipt:
+            packet.update(
+                {
+                    "receipt_id": current_receipt["receipt_id"],
+                    "result_sha256": current_receipt["result_sha256"],
+                    "result_binding": current_receipt["result"],
+                }
+            )
 
     elif state == "REPAIR_READY":
         failed_result = run.get("current_result_path")
@@ -271,6 +340,20 @@ def build_action_packet(
     else:
         raise ValidationError(f"unsupported run state '{state}'")
 
+    if auditable:
+        packet["workspace_root"] = run["workspace_root"]
+        packet["input_bindings"] = _auditable_input_bindings(
+            asset, edit, run
+        )
+        packet["packet_id"] = packet_digest(packet)
+        if str(packet.get("action", "")).startswith("imagegen_"):
+            run["issued_packet"] = {
+                "packet_id": packet["packet_id"],
+                "action": packet["action"],
+                "state": run["state"],
+                "iteration": run["iteration"],
+            }
+
     return packet
 
 
@@ -279,14 +362,29 @@ def build_from_paths(
     edit_path: Path,
     run_path: Path,
 ) -> dict[str, Any]:
-    asset_doc = load_document(asset_path)
-    edit_doc = load_document(edit_path)
-    for doc in (asset_doc, edit_doc):
-        validate_document(doc.data, doc.path)
-    cross_validate([asset_doc, edit_doc])
+    with _exclusive_run_lock(run_path):
+        run = load_run(run_path)
+        if run.get("auditable"):
+            workspace_root = Path(run["workspace_root"])
+            resolve_in_workspace(workspace_root, run_path.expanduser().resolve())
+            asset_path = resolve_in_workspace(
+                workspace_root, run["asset_document_path"]
+            )
+            edit_path = resolve_in_workspace(
+                workspace_root, run["edit_document_path"]
+            )
+        asset_doc = load_document(asset_path)
+        edit_doc = load_document(edit_path)
+        for doc in (asset_doc, edit_doc):
+            validate_document(doc.data, doc.path)
+        cross_validate([asset_doc, edit_doc])
 
-    run = load_run(run_path)
-    return build_action_packet(asset_doc.data, edit_doc.data, run)
+        packet = build_action_packet(asset_doc.data, edit_doc.data, run)
+        if run.get("auditable") and str(packet.get("action", "")).startswith(
+            "imagegen_"
+        ):
+            save_run(run_path, run)
+        return packet
 
 
 def main(argv: list[str] | None = None) -> int:

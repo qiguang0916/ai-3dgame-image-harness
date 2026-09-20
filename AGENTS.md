@@ -15,6 +15,9 @@ This repository is an Agent Skill / lightweight image-production harness, not an
 - Never claim Visual QA passed without inspecting the actual generated image.
 - Missing/failed/unverifiable required hard gates prevent acceptance.
 - Host/backend failures must be persisted through `mark-blocked`; do not hand-edit run JSON.
+- Real generation must bind the current packet, input digests, result digest, and host attestation in an execution receipt before QA.
+- Real QA must bind the current receipt/result digest; do not reuse a report across iterations.
+- Master candidates require explicit pixel QA and immutable promotion; never auto-promote or overwrite a Master.
 - Repair/regeneration loops must remain bounded.
 - Keep root `SKILL.md` concise; put heavy protocol detail in `references/`.
 

@@ -1,7 +1,6 @@
 ---
 name: game-image-visual-qa
 description: Use when accepting, repairing, regenerating, or blocking a generated game-asset image based on actual pixels, approved references, required hard gates, structural topology, and task-specific change requirements.
-version: 0.4.0
 ---
 
 # Game Asset Visual QA
@@ -34,6 +33,11 @@ Use:
 - `NOT_VERIFIABLE`
 
 Every required hard gate must appear in the QA report.
+
+For a real auditable run, bind the report to the current `run_id`, iteration,
+receipt id, and result SHA-256. Every required PASS gate needs non-empty visual
+evidence, an inspection method, and either a bound reference digest or an
+explicit self-contained observation.
 
 Overall `PASS` / `PASS_WITH_NOTES` is valid only when every required hard gate is explicitly `PASS`.
 

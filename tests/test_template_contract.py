@@ -45,6 +45,17 @@ class TemplateContractTests(unittest.TestCase):
         )
         self.assertIn("NOT_VERIFIABLE", text)
 
+    def test_qa_template_pass_examples_include_evidence_notes(self) -> None:
+        with (ROOT / "templates/qa-report.toml").open("rb") as handle:
+            data = tomllib.load(handle)
+        passing_hard_gates = [
+            gate
+            for gate in data["gates"]
+            if gate["severity"] == "hard" and gate["status"] == "PASS"
+        ]
+        self.assertTrue(passing_hard_gates)
+        self.assertTrue(all(gate["note"].strip() for gate in passing_hard_gates))
+
     def test_execution_run_template_contains_v04_runtime_fields(self) -> None:
         data = json.loads(
             (ROOT / "templates/execution-run.json").read_text(
@@ -54,6 +65,7 @@ class TemplateContractTests(unittest.TestCase):
         for key in (
             "preflight",
             "blocker",
+            "issued_packet",
             "required_hard_gates",
             "topology_hard_gates",
         ):

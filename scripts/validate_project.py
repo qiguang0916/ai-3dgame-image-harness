@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -12,7 +13,13 @@ from typing import Any, Iterable
 
 
 ALLOWED_DOCUMENT_TYPES = {"asset_manifest", "edit_request", "qa_report"}
-ALLOWED_REFERENCE_STATES = {"approved", "draft", "rejected", "superseded"}
+ALLOWED_REFERENCE_STATES = {
+    "approved",
+    "candidate",
+    "draft",
+    "rejected",
+    "superseded",
+}
 ALLOWED_OPERATIONS = {
     "create",
     "local_edit",
@@ -42,6 +49,14 @@ ALLOWED_GATE_STATUSES = {
     "NOT_CHECKED",
     "NOT_VERIFIABLE",
 }
+MASTER_LINEAGE_FIELDS = {
+    "revision",
+    "supersedes",
+    "content_sha256",
+    "source_run_id",
+    "source_qa_report_id",
+}
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -112,6 +127,33 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
         if len(set(roles)) != len(roles):
             raise ValidationError(f"{rwhere}: duplicate reference roles")
 
+        lineage_fields = MASTER_LINEAGE_FIELDS.intersection(ref)
+        if lineage_fields and lineage_fields != MASTER_LINEAGE_FIELDS:
+            missing = ", ".join(sorted(MASTER_LINEAGE_FIELDS - lineage_fields))
+            raise ValidationError(
+                f"{rwhere}: enhanced master lineage is missing: {missing}"
+            )
+        if lineage_fields:
+            revision = ref["revision"]
+            if (
+                isinstance(revision, bool)
+                or not isinstance(revision, int)
+                or revision < 1
+            ):
+                raise ValidationError(
+                    f"{rwhere}: revision must be a positive integer"
+                )
+            for key in ("supersedes", "source_run_id", "source_qa_report_id"):
+                require(ref, key, rwhere)
+            if ref["supersedes"] == ref_id:
+                raise ValidationError(f"{rwhere}: supersedes cannot reference itself")
+            if not isinstance(ref["content_sha256"], str) or not SHA256_PATTERN.fullmatch(
+                ref["content_sha256"]
+            ):
+                raise ValidationError(
+                    f"{rwhere}: content_sha256 must be 64 lowercase hex characters"
+                )
+
     if approved == 0:
         raise ValidationError(f"{where}: at least one approved reference is required")
     if primary_master not in ids:
@@ -120,6 +162,52 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
         )
     if reference_by_id[primary_master].get("state") != "approved":
         raise ValidationError(f"{where}: primary_master must be approved")
+
+    successor_by_predecessor: dict[str, str] = {}
+    lineage_edges: dict[str, str] = {}
+    for ref_id, ref in reference_by_id.items():
+        if not MASTER_LINEAGE_FIELDS.intersection(ref):
+            continue
+        supersedes = ref["supersedes"]
+        if supersedes in successor_by_predecessor:
+            raise ValidationError(
+                f"{where}: reference '{supersedes}' has multiple successors: "
+                f"'{successor_by_predecessor[supersedes]}' and '{ref_id}'"
+            )
+        successor_by_predecessor[supersedes] = ref_id
+        lineage_edges[ref_id] = supersedes
+        predecessor = reference_by_id.get(supersedes)
+        if predecessor is None:
+            raise ValidationError(
+                f"{where}: reference '{ref_id}' supersedes unknown reference "
+                f"'{supersedes}'"
+            )
+        if ref["state"] == "approved" and predecessor["state"] != "superseded":
+            raise ValidationError(
+                f"{where}: approved reference '{ref_id}' requires its predecessor "
+                f"'{supersedes}' to be superseded"
+            )
+        predecessor_revision = predecessor.get("revision")
+        if (
+            isinstance(predecessor_revision, int)
+            and not isinstance(predecessor_revision, bool)
+            and predecessor_revision >= ref["revision"]
+        ):
+            raise ValidationError(
+                f"{where}: reference '{ref_id}' revision must be newer than "
+                f"'{supersedes}'"
+            )
+
+    for start in lineage_edges:
+        seen: set[str] = set()
+        current = start
+        while current in lineage_edges:
+            if current in seen:
+                raise ValidationError(
+                    f"{where}: reference lineage contains a cycle at '{current}'"
+                )
+            seen.add(current)
+            current = lineage_edges[current]
 
     qa = data.get("qa", {})
     if qa:
@@ -322,6 +410,24 @@ def validate_qa_report(data: dict[str, Any], path: Path) -> None:
         raise ValidationError(
             f"{where}: REPAIR_MINOR requires at least one repair directive"
         )
+
+    master_candidate = data.get("master_candidate")
+    if master_candidate is not None:
+        mwhere = f"{where}: master_candidate"
+        if not isinstance(master_candidate, dict):
+            raise ValidationError(f"{mwhere}: must be a table")
+        for key in ("reference_id", "content_sha256", "source_run_id"):
+            require(master_candidate, key, mwhere)
+        digest = master_candidate["content_sha256"]
+        if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+            raise ValidationError(
+                f"{mwhere}: content_sha256 must be 64 lowercase hex characters"
+            )
+        inspected = master_candidate.get("actual_pixels_inspected")
+        if not isinstance(inspected, bool):
+            raise ValidationError(
+                f"{mwhere}: actual_pixels_inspected must be boolean"
+            )
 
 
 def validate_document(data: dict[str, Any], path: Path) -> None:

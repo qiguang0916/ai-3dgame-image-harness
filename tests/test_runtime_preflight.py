@@ -13,6 +13,7 @@ if str(SCRIPTS) not in sys.path:
 
 import execution_loop
 import runtime_preflight
+from artifact_integrity import sha256_file
 
 
 PNG_1X1 = base64.b64decode(
@@ -104,6 +105,25 @@ class RuntimePreflightTests(unittest.TestCase):
             )
             self.assertEqual("BLOCKED", result["status"])
             self.assertEqual("reference_image_invalid", result["reason_code"])
+
+    def test_declared_reference_digest_mismatch_blocks_real_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_png(root, "refs/master.png")
+            self._write_png(root, "refs/support.png")
+            asset = self._asset()
+            asset["references"][0]["content_sha256"] = sha256_file(
+                root / "refs/master.png"
+            )
+            self.assertEqual(
+                "PASS",
+                runtime_preflight.run_preflight(asset, self._edit(), root)["status"],
+            )
+
+            (root / "refs/master.png").write_bytes(PNG_1X1 + b"replaced")
+            result = runtime_preflight.run_preflight(asset, self._edit(), root)
+            self.assertEqual("BLOCKED", result["status"])
+            self.assertEqual("reference_digest_mismatch", result["reason_code"])
 
     def test_dry_run_allows_missing_fixture_images(self) -> None:
         with tempfile.TemporaryDirectory() as td:

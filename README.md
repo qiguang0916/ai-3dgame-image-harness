@@ -2,9 +2,9 @@
 
 Game Image 是面向 ChatGPT / Codex 的游戏图片生产控制层。它不在本地跑图片模型；它负责把图片任务变成可验证的 reference、topology、QA 和状态机契约。
 
-## v0.4
+## v0.5
 
-v0.4 针对真实 Host E2E 暴露的问题加固：
+v0.5 在 v0.4 状态机基础上增加可审计执行：
 
 - real runtime reference preflight；
 - explicit edit target；
@@ -13,9 +13,14 @@ v0.4 针对真实 Host E2E 暴露的问题加固：
 - required hard-gate completeness；
 - `NOT_VERIFIABLE`；
 - host/backend blocker persistence；
-- Host Action Packet v2；
+- Host Action Packet v3 for auditable real runs (legacy dry-run packets remain v2)；
 - bounded repair/regeneration；
-- no automatic API/CLI fallback。
+- no automatic API/CLI fallback；
+- Packet/input/result SHA-256 execution receipt；
+- workspace-bound portable/resolved paths；
+- QA/receipt/result digest binding；
+- explicit topology count semantics；
+- candidate → Master QA → immutable approved revision。
 
 ## 三种验证层级
 
@@ -65,7 +70,10 @@ Host 必须服从 Packet 中的 edit target、references、requested delta、top
 图片成功持久化后：
 
 ~~~bash
-python3 scripts/execution_loop.py mark-generated --run <run.json> --result <image.png>
+python3 scripts/execution_loop.py mark-generated \
+  --run <run.json> --packet <packet.json> --result <image.png> \
+  --receipt <receipt.json> \
+  --host-attestation "Built-in imagegen executed this packet without fallback."
 ~~~
 
 QA 后：
@@ -93,6 +101,8 @@ python3 scripts/execution_loop.py mark-blocked \
 - `references/host-failure-protocol.md`
 - `references/host-action-protocol.md`
 - `references/openai-imagegen-delegation.md`
+- `references/execution-receipt.md`
+- `references/master-lifecycle.md`
 
 ## Verification
 

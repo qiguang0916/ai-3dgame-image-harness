@@ -1,7 +1,6 @@
 ---
 name: game-image-execution-loop
 description: Use when a game-image task must run through real reference preflight, host-native image generation or editing, visual QA, bounded repair/regeneration, or a persistent BLOCKED outcome.
-version: 0.4.0
 ---
 
 # Game Image Execution Loop
@@ -15,6 +14,7 @@ Read when relevant:
 - `references/runtime-preflight.md`
 - `references/host-action-protocol.md`
 - `references/host-failure-protocol.md`
+- `references/execution-receipt.md`
 
 ## Initialize
 
@@ -46,7 +46,12 @@ python3 scripts/next_action.py --asset <asset.toml> --edit <edit.toml> --run <ru
 After a real image result is persisted:
 
 ~~~bash
-python3 scripts/execution_loop.py mark-generated --run <run.json> --result <image.png>
+python3 scripts/execution_loop.py mark-generated \
+  --run <run.json> \
+  --packet <packet.json> \
+  --result <image.png> \
+  --receipt <receipt.json> \
+  --host-attestation "Built-in imagegen executed this packet without fallback."
 ~~~
 
 After real visual inspection:

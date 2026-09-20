@@ -17,6 +17,18 @@ ALLOWED_RELATIONSHIP_TYPES = {
     "interfaces_with",
 }
 
+ALLOWED_COUNT_UNITS = {"assembly", "visible_instance", "piece"}
+ENHANCED_COMPONENT_FIELDS = {"count_unit", "visual_definition", "excludes"}
+
+
+def _validate_string_list(value: Any, where: str) -> None:
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ValidationError(f"{where}: expected a list of non-empty strings")
+    if len(value) != len(set(value)):
+        raise ValidationError(f"{where}: duplicate values are not allowed")
+
 
 def validate_topology_schema(asset: dict[str, Any], where: str) -> None:
     topology = asset.get("topology")
@@ -34,6 +46,17 @@ def validate_topology_schema(asset: dict[str, Any], where: str) -> None:
             f"{where}: topology.relationships must be an array"
         )
 
+    if "forbid_extra_components" in topology and not isinstance(
+        topology["forbid_extra_components"], bool
+    ):
+        raise ValidationError(
+            f"{where}: topology.forbid_extra_components must be boolean"
+        )
+    _validate_string_list(
+        topology.get("allowed_visible_details", []),
+        f"{where}: topology.allowed_visible_details",
+    )
+
     component_ids: set[str] = set()
     for index, component in enumerate(components):
         cwhere = f"{where}: topology.components[{index}]"
@@ -47,16 +70,49 @@ def validate_topology_schema(asset: dict[str, Any], where: str) -> None:
                 f"{cwhere}: duplicate component id '{component_id}'"
             )
         component_ids.add(component_id)
+        if "required" in component and not isinstance(
+            component["required"], bool
+        ):
+            raise ValidationError(f"{cwhere}: required must be boolean")
         if component.get("required", False) and "count" not in component:
             raise ValidationError(
                 f"{cwhere}: required component must declare count"
             )
         count = component.get("count")
         if count is not None and (
-            not isinstance(count, int) or count < 0
+            isinstance(count, bool)
+            or not isinstance(count, int)
+            or count < 0
         ):
             raise ValidationError(
                 f"{cwhere}: count must be a non-negative integer"
+            )
+
+        enhanced_fields = ENHANCED_COMPONENT_FIELDS.intersection(component)
+        if enhanced_fields and enhanced_fields != ENHANCED_COMPONENT_FIELDS:
+            missing = ", ".join(
+                sorted(ENHANCED_COMPONENT_FIELDS - enhanced_fields)
+            )
+            raise ValidationError(
+                f"{cwhere}: enhanced topology component is missing: {missing}"
+            )
+        if enhanced_fields:
+            count_unit = component["count_unit"]
+            if count_unit not in ALLOWED_COUNT_UNITS:
+                raise ValidationError(
+                    f"{cwhere}: count_unit must be one of: "
+                    + ", ".join(sorted(ALLOWED_COUNT_UNITS))
+                )
+            visual_definition = component["visual_definition"]
+            if (
+                not isinstance(visual_definition, str)
+                or not visual_definition.strip()
+            ):
+                raise ValidationError(
+                    f"{cwhere}: visual_definition must be a non-empty string"
+                )
+            _validate_string_list(
+                component["excludes"], f"{cwhere}: excludes"
             )
 
     relationship_ids: set[str] = set()
@@ -74,6 +130,10 @@ def validate_topology_schema(asset: dict[str, Any], where: str) -> None:
                 f"{rwhere}: duplicate relationship id '{relation_id}'"
             )
         relationship_ids.add(relation_id)
+        if "required" in relationship and not isinstance(
+            relationship["required"], bool
+        ):
+            raise ValidationError(f"{rwhere}: required must be boolean")
         if relation_type not in ALLOWED_RELATIONSHIP_TYPES:
             raise ValidationError(
                 f"{rwhere}: unsupported relationship type '{relation_type}'"
@@ -206,6 +266,11 @@ def packet_topology(asset: dict[str, Any]) -> dict[str, Any]:
             {
                 "id": component["id"],
                 "count": component.get("count"),
+                "count_unit": component.get("count_unit", "piece"),
+                "visual_definition": component.get(
+                    "visual_definition", component["id"]
+                ),
+                "excludes": list(component.get("excludes", [])),
             }
             for component in topology.get("components", [])
             if component.get("required", False)
@@ -221,5 +286,8 @@ def packet_topology(asset: dict[str, Any]) -> dict[str, Any]:
         ],
         "forbid_extra_components": bool(
             topology.get("forbid_extra_components", False)
+        ),
+        "allowed_visible_details": list(
+            topology.get("allowed_visible_details", [])
         ),
     }

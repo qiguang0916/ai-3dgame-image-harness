@@ -1,7 +1,6 @@
 ---
 name: game-image
 description: Use when creating, editing, repairing, or validating game-asset images that require approved references, structural consistency, controlled local edits, repeatable visual QA, or host-image execution without a local model.
-version: 0.4.0
 ---
 
 # Game Image
@@ -16,6 +15,8 @@ Treat game-image generation as a controlled production run, not a one-shot promp
 - Real runs perform runtime preflight; use `--dry-run` only for fixtures/examples.
 - Edit-like operations use an explicit edit target.
 - Host Action Packets are authoritative for target, references, contracts, budgets, and next transition.
+- Real generation is auditable: the packet, bound inputs, result, and host attestation produce an execution receipt.
+- A Master candidate is never production authority until real-pixel Master QA explicitly approves and promotes a new immutable revision.
 - Required hard gates must be explicitly verified before acceptance.
 - Topology failures regenerate; localized defects may repair; unavailable evidence/backend blocks.
 - Never auto-switch to API/CLI fallback.
@@ -27,8 +28,8 @@ Treat game-image generation as a controlled production run, not a one-shot promp
 2. Initialize a real run with `scripts/execution_loop.py init`; preflight may block it.
 3. Read the next packet from `scripts/next_action.py`.
 4. Execute only the packet action with the host-native image tool.
-5. Persist the selected output, then `mark-generated`.
-6. When the packet says `visual_qa`, inspect actual pixels and write a complete QA TOML.
+5. Persist the selected output, then `mark-generated` with its packet, receipt path, and short host attestation.
+6. When the packet says `visual_qa`, inspect actual pixels and write a digest-bound, evidence-complete QA TOML.
 7. `apply-qa`, then repeat until `deliver` or `report_blocked`.
 
 ## Load detailed contracts when relevant
@@ -39,6 +40,8 @@ Treat game-image generation as a controlled production run, not a one-shot promp
 - QA report completeness and routing: `references/visual-qa-contract.md`
 - Host/backend failure: `references/host-failure-protocol.md`
 - Packet fields and execution: `references/host-action-protocol.md`
+- Execution receipt and artifact binding: `references/execution-receipt.md`
+- Master candidate approval: `references/master-lifecycle.md`
 - OpenAI/Codex delegation: `references/openai-imagegen-delegation.md`
 
 Subskills cover reference selection, delta edits, visual QA, and the execution loop under `skills/`.

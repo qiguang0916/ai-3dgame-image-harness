@@ -1,7 +1,6 @@
 ---
 name: game-image-delta-edit
 description: Route game image changes to the smallest safe edit. Use for local material/color/part corrections, repair prompts, and edit-vs-regenerate decisions.
-version: 0.1.0
 ---
 
 # Delta Edit

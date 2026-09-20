@@ -3,7 +3,7 @@ schema_version = 1
 asset_id = "ASSET_001"
 asset_type = "hero_prop"
 status = "active"
-primary_master = "ASSEMBLED_MASTER"
+primary_master = "ASSEMBLED_MASTER_R2"
 
 [locks]
 hard = [
@@ -25,16 +25,26 @@ hard_gate_policy = "reject_on_any_failure"
 
 [topology]
 forbid_extra_components = true
+allowed_visible_details = [
+  "maker mark",
+  "assembly seam"
+]
 
 [[topology.components]]
 id = "body"
 required = true
 count = 1
+count_unit = "assembly"
+visual_definition = "one complete body silhouette"
+excludes = ["cast shadows", "reflections"]
 
 [[topology.components]]
 id = "decorative_fastener"
 required = true
 count = 3
+count_unit = "visible_instance"
+visual_definition = "round fastener head visible from the approved camera"
+excludes = ["engraved circles", "specular highlights"]
 
 [[topology.relationships]]
 id = "fasteners_mounted_on_body"
@@ -43,12 +53,25 @@ members = ["decorative_fastener", "body"]
 required = true
 
 [[references]]
-id = "ASSEMBLED_MASTER"
-path = "references/ASSET_001_ASSEMBLED_MASTER.png"
-state = "approved"
+id = "ASSEMBLED_MASTER_R1"
+path = "references/ASSET_001_ASSEMBLED_MASTER_R1.png"
+state = "superseded"
 priority = 100
 roles = ["identity", "geometry", "material", "camera", "style"]
-notes = "Primary overall visual master."
+notes = "Historical Master retained for lineage only."
+
+[[references]]
+id = "ASSEMBLED_MASTER_R2"
+path = "references/ASSET_001_ASSEMBLED_MASTER_R2.png"
+state = "approved"
+priority = 110
+roles = ["identity", "geometry", "material", "camera", "style"]
+notes = "Current primary overall visual Master."
+revision = 2
+supersedes = "ASSEMBLED_MASTER_R1"
+content_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+source_run_id = "ASSET_001__EDIT_002"
+source_qa_report_id = "QA_MASTER_002"
 
 [[references]]
 id = "COMPONENT_MASTER"

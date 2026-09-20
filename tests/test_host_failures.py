@@ -13,6 +13,7 @@ if str(SCRIPTS) not in sys.path:
 import execution_loop
 import next_action
 import validate_project
+from artifact_integrity import packet_digest
 
 
 class HostFailureTests(unittest.TestCase):
@@ -27,6 +28,32 @@ class HostFailureTests(unittest.TestCase):
             / "edits"
             / "rivets-brushed-silver.toml"
         ).data
+
+    def _auditable_packet(self, run: dict, root: Path) -> dict:
+        run["auditable"] = True
+        run["workspace_root"] = str(root)
+        run["current_receipt"] = None
+        packet = {
+            "schema_version": 3,
+            "run_id": run["run_id"],
+            "asset_id": run["asset_id"],
+            "request_id": run["request_id"],
+            "state": run["state"],
+            "iteration": run["iteration"],
+            "action": "imagegen_edit",
+            "backend": "host_native_imagegen",
+            "fallback_policy": "none",
+            "input_bindings": [],
+            "workspace_root": str(root),
+        }
+        packet["packet_id"] = packet_digest(packet)
+        run["issued_packet"] = {
+            "packet_id": packet["packet_id"],
+            "action": packet["action"],
+            "state": run["state"],
+            "iteration": run["iteration"],
+        }
+        return packet
 
     def test_host_unavailable_persists_blocked_without_budget_use(self) -> None:
         run = execution_loop.init_run(self.asset, self.edit)
@@ -67,10 +94,18 @@ class HostFailureTests(unittest.TestCase):
         self.assertFalse(blocked["blocker"]["retryable"])
 
     def test_missing_generated_result_blocks_formally(self) -> None:
-        run = execution_loop.init_run(self.asset, self.edit)
-        blocked = execution_loop._record_generated_cli(
-            run, "/definitely/missing/result.png", dry_run=False
-        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            run = execution_loop.init_run(self.asset, self.edit)
+            packet = self._auditable_packet(run, root)
+            blocked = execution_loop._record_generated_cli(
+                run,
+                "missing.png",
+                dry_run=False,
+                packet=packet,
+                receipt_path="receipt.json",
+                host_attestation="built-in imagegen",
+            )
         self.assertEqual("BLOCKED", blocked["state"])
         self.assertEqual(
             "generated_result_missing",
@@ -78,12 +113,19 @@ class HostFailureTests(unittest.TestCase):
         )
 
     def test_invalid_generated_result_blocks_formally(self) -> None:
-        run = execution_loop.init_run(self.asset, self.edit)
         with tempfile.TemporaryDirectory() as td:
-            path = Path(td) / "bad.png"
+            root = Path(td)
+            run = execution_loop.init_run(self.asset, self.edit)
+            packet = self._auditable_packet(run, root)
+            path = root / "bad.png"
             path.write_text("not an image", encoding="utf-8")
             blocked = execution_loop._record_generated_cli(
-                run, str(path), dry_run=False
+                run,
+                "bad.png",
+                dry_run=False,
+                packet=packet,
+                receipt_path="receipt.json",
+                host_attestation="built-in imagegen",
             )
         self.assertEqual("BLOCKED", blocked["state"])
         self.assertEqual(

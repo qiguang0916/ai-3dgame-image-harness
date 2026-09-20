@@ -13,7 +13,18 @@ python3 scripts/next_action.py \
 
 A real run must have passed runtime preflight before an image action can exist. A blocked run returns only `report_blocked`.
 
-## Packet v2 common fields
+## Packet versions
+
+Legacy/dry in-memory flows may emit Packet v2. A real auditable run emits
+Packet v3 with `packet_id`, `iteration`, `workspace_root`, and
+`input_bindings`. Each input binding carries a portable workspace-relative
+path, resolved local path, SHA-256, and PNG metadata.
+
+When an image action is emitted, its `packet_id`, action, state, and iteration
+are persisted as the run's `issued_packet`. `mark-generated` accepts only that
+exact issued Packet; recomputing a digest for altered content is not enough.
+
+## Common fields
 
 Every packet carries:
 
@@ -44,6 +55,10 @@ Use the host-native generation capability with packet references and packet prom
 
 Use the exact packet `edit_target`. Support references are separate inputs with declared roles.
 
+For a real v3 action, pass only files in `input_bindings`; do not reinterpret
+paths from the shell cwd. After execution, use the same packet to create the
+execution receipt.
+
 For initial edits the target comes from `execution.edit_target_reference_id`.
 
 For repair, the failed generated result becomes the edit target.
@@ -61,6 +76,8 @@ The packet includes required hard gates and allows required hard-gate statuses:
 - `NOT_VERIFIABLE`
 
 Write a complete QA TOML, then apply it through `execution_loop.py apply-qa`.
+The QA report must bind the current receipt and result digest; an earlier
+iteration's report cannot be replayed.
 
 ### deliver
 
@@ -86,6 +103,7 @@ See:
 - `references/topology-contract.md`
 - `references/visual-qa-contract.md`
 - `references/host-failure-protocol.md`
+- `references/execution-receipt.md`
 
 ## OpenAI/Codex delegation
 

@@ -7,14 +7,25 @@ This script never calls an image model. The Agent/host owns the image tool call.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from artifact_integrity import (
+    file_binding,
+    packet_digest,
+    png_metadata,
+    receipt_digest,
+    resolve_in_workspace,
+    sha256_file,
+    workspace_relative,
+)
 from validate_project import (
     ValidationError,
     cross_validate,
@@ -44,6 +55,7 @@ HOST_BLOCK_REASON_CODES = {
     "reference_unreadable",
     "reference_image_invalid",
     "reference_sufficiency_failed",
+    "path_outside_workspace",
 }
 
 
@@ -177,6 +189,20 @@ def validate_run_state(run: dict[str, Any]) -> None:
     if blocker is not None and not isinstance(blocker, dict):
         raise ValidationError("blocker must be an object or null")
 
+    if run.get("auditable"):
+        workspace_root = run.get("workspace_root")
+        if not isinstance(workspace_root, str) or not workspace_root.strip():
+            raise ValidationError("auditable run requires workspace_root")
+        if not Path(workspace_root).is_absolute():
+            raise ValidationError("workspace_root must be absolute")
+        if "current_receipt" not in run:
+            raise ValidationError("auditable run requires current_receipt")
+        current_receipt = run.get("current_receipt")
+        if current_receipt is not None and not isinstance(
+            current_receipt, dict
+        ):
+            raise ValidationError("current_receipt must be an object or null")
+
 
 def mark_blocked(
     run: dict[str, Any],
@@ -222,8 +248,17 @@ def mark_blocked(
     return updated
 
 
-def mark_generated(run: dict[str, Any], result_path: str) -> dict[str, Any]:
+def mark_generated(
+    run: dict[str, Any],
+    result_path: str,
+    *,
+    receipt: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     validate_run_state(run)
+    if run.get("auditable") and receipt is None:
+        raise ValidationError(
+            "auditable runs must record generation through a receipt"
+        )
     if run["state"] not in {"READY", "REPAIR_READY", "REGENERATE_READY"}:
         raise ValidationError(
             f"cannot record generation while run is {run['state']}"
@@ -236,6 +271,8 @@ def mark_generated(run: dict[str, Any], result_path: str) -> dict[str, Any]:
     updated["iteration"] += 1
     updated["state"] = "QA_PENDING"
     updated["current_result_path"] = result_path
+    if receipt is not None:
+        updated["current_receipt"] = deepcopy(receipt)
     updated["last_qa"] = None
     updated["blocker"] = None
     updated["next_action"] = "inspect_pixels_and_write_qa"
@@ -267,6 +304,83 @@ def _required_gate_statuses(
     }
 
 
+def _non_empty(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _validate_auditable_qa(
+    run: dict[str, Any],
+    qa: dict[str, Any],
+) -> None:
+    receipt = run.get("current_receipt")
+    if not isinstance(receipt, dict):
+        raise ValidationError("auditable QA requires a current receipt")
+    if receipt_digest(receipt) != receipt.get("receipt_id"):
+        raise ValidationError("current receipt integrity check failed")
+
+    expected = {
+        "run_id": run["run_id"],
+        "iteration": run["iteration"],
+        "receipt_id": receipt["receipt_id"],
+        "result_sha256": receipt["result_sha256"],
+    }
+    for key, value in expected.items():
+        if qa.get(key) != value:
+            raise ValidationError(f"QA {key} does not match current receipt")
+
+    result_path = resolve_in_workspace(
+        run["workspace_root"], receipt["result"]["path"]
+    )
+    if not result_path.is_file():
+        raise ValidationError("receipt result is missing during QA")
+    if sha256_file(result_path) != receipt["result_sha256"]:
+        raise ValidationError("receipt result was replaced before QA")
+
+    for binding in receipt.get("input_bindings", []):
+        input_path = resolve_in_workspace(
+            run["workspace_root"], binding.get("path", "")
+        )
+        if not input_path.is_file():
+            raise ValidationError("receipt input is missing during QA")
+        if sha256_file(input_path) != binding.get("sha256"):
+            raise ValidationError("receipt input was replaced before QA")
+        if png_metadata(input_path) != binding.get("png"):
+            raise ValidationError("receipt input PNG metadata changed before QA")
+
+    gate_by_name = {gate["name"]: gate for gate in qa.get("gates", [])}
+    allowed_reference_digests = {
+        binding["sha256"] for binding in receipt.get("input_bindings", [])
+    }
+    for name in run.get("required_hard_gates", []):
+        gate = gate_by_name.get(name, {})
+        if gate.get("status") != "PASS":
+            continue
+        if not (
+            _non_empty(gate.get("note"))
+            or _non_empty(gate.get("evidence"))
+        ):
+            raise ValidationError(
+                f"required PASS gate '{name}' needs non-empty note or evidence"
+            )
+        if not _non_empty(gate.get("inspection_method")):
+            raise ValidationError(
+                f"required PASS gate '{name}' needs inspection_method"
+            )
+        reference_digest = gate.get("reference_digest")
+        observation = gate.get("observation")
+        if not (_non_empty(reference_digest) or _non_empty(observation)):
+            raise ValidationError(
+                f"required PASS gate '{name}' needs reference_digest or observation"
+            )
+        if (
+            _non_empty(reference_digest)
+            and reference_digest not in allowed_reference_digests
+        ):
+            raise ValidationError(
+                f"required PASS gate '{name}' has an unbound reference_digest"
+            )
+
+
 def apply_qa(
     run: dict[str, Any],
     qa: dict[str, Any],
@@ -287,6 +401,8 @@ def apply_qa(
         list(run.get("required_hard_gates", [])),
         qa,
     )
+    if run.get("auditable"):
+        _validate_auditable_qa(run, qa)
 
     qa_status = qa["status"]
     updated = deepcopy(run)
@@ -302,6 +418,9 @@ def apply_qa(
         "gates": deepcopy(qa.get("gates", [])),
         "repair_directives": deepcopy(qa.get("repair_directives", [])),
     }
+    for key in ("run_id", "iteration", "receipt_id", "result_sha256"):
+        if key in qa:
+            updated["last_qa"][key] = qa[key]
 
     required_statuses = _required_gate_statuses(run, qa)
     if any(
@@ -413,6 +532,19 @@ def save_run(path: Path, run: dict[str, Any]) -> None:
     )
 
 
+@contextmanager
+def _exclusive_run_lock(path: Path):
+    """Serialize state-changing CLI operations for one run file."""
+    lock_path = path.with_name(f".{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def init_from_paths(
     asset_path: Path,
     edit_path: Path,
@@ -431,7 +563,18 @@ def init_from_paths(
 
     from runtime_preflight import run_preflight
 
-    base_dir = workspace_root or asset_path.parent
+    base_dir = (workspace_root or asset_path.parent).expanduser().resolve()
+    resolve_in_workspace(base_dir, asset_path.expanduser().resolve())
+    resolve_in_workspace(base_dir, edit_path.expanduser().resolve())
+    run["workspace_root"] = str(base_dir)
+    run["auditable"] = not dry_run
+    run["current_receipt"] = None
+    run["asset_document_path"] = workspace_relative(
+        base_dir, asset_path.expanduser().resolve()
+    )
+    run["edit_document_path"] = workspace_relative(
+        base_dir, edit_path.expanduser().resolve()
+    )
     preflight = run_preflight(
         asset_doc.data,
         edit_doc.data,
@@ -463,36 +606,133 @@ def apply_qa_from_path(
     return apply_qa(run, qa_doc.data)
 
 
-def _record_generated_cli(
+def _load_json_object(
+    value: dict[str, Any] | Path | str,
+    workspace_root: Path,
+    label: str,
+) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return deepcopy(value)
+    raw = str(value)
+    if raw.lstrip().startswith("{"):
+        loaded = json.loads(raw)
+    else:
+        path = resolve_in_workspace(workspace_root, raw)
+        with path.open("r", encoding="utf-8") as handle:
+            loaded = json.load(handle)
+    if not isinstance(loaded, dict):
+        raise ValidationError(f"{label} must be a JSON object")
+    return loaded
+
+
+def _load_host_attestation(
+    value: dict[str, Any] | Path | str,
+    workspace_root: Path,
+) -> dict[str, Any]:
+    if isinstance(value, dict):
+        attestation = deepcopy(value)
+    else:
+        raw = str(value).strip()
+        if not raw:
+            raise ValidationError("host attestation must not be empty")
+        if raw.startswith("{"):
+            attestation = _load_json_object(raw, workspace_root, "host attestation")
+        else:
+            possible_path = resolve_in_workspace(workspace_root, raw)
+            if possible_path.is_file():
+                attestation = _load_json_object(
+                    possible_path, workspace_root, "host attestation"
+                )
+            else:
+                attestation = {"statement": raw}
+    if not attestation:
+        raise ValidationError("host attestation must not be empty")
+    return attestation
+
+
+def _expected_packet_action(run: dict[str, Any]) -> str:
+    if run["state"] == "REPAIR_READY":
+        return "imagegen_edit"
+    if run["state"] in {"READY", "REGENERATE_READY"}:
+        return f"imagegen_{run['execution_mode']}"
+    raise ValidationError(
+        f"cannot record generation while run is {run['state']}"
+    )
+
+
+def _record_auditable_generation(
     run: dict[str, Any],
     result: str,
     *,
-    dry_run: bool,
+    packet: dict[str, Any] | Path | str,
+    receipt_path: Path | str,
+    host_attestation: dict[str, Any] | Path | str,
 ) -> dict[str, Any]:
-    if dry_run:
-        return mark_generated(run, result)
+    workspace_root = Path(run["workspace_root"]).resolve()
+    packet_data = _load_json_object(packet, workspace_root, "packet")
+    if packet_data.get("packet_id") != packet_digest(packet_data):
+        raise ValidationError("packet integrity check failed")
+    issued_packet = run.get("issued_packet")
+    if not isinstance(issued_packet, dict):
+        raise ValidationError("run has no issued action packet binding")
+    expected_issued = {
+        "packet_id": packet_data.get("packet_id"),
+        "action": packet_data.get("action"),
+        "state": run.get("state"),
+        "iteration": run.get("iteration"),
+    }
+    if issued_packet != expected_issued:
+        raise ValidationError("packet does not match the action issued for this run")
+    for key in ("run_id", "asset_id", "request_id", "state", "iteration"):
+        if packet_data.get(key) != run.get(key):
+            raise ValidationError(f"packet {key} does not match run")
+    if packet_data.get("action") != _expected_packet_action(run):
+        raise ValidationError("packet action does not match run")
+    if packet_data.get("fallback_policy") != "none":
+        raise ValidationError("packet fallback_policy must be none")
+    if packet_data.get("backend") != "host_native_imagegen":
+        raise ValidationError("packet backend must be host_native_imagegen")
 
-    path = Path(result)
-    if not path.exists():
+    verified_inputs: list[dict[str, Any]] = []
+    input_bindings = packet_data.get("input_bindings")
+    if not isinstance(input_bindings, list):
+        raise ValidationError("auditable packet input_bindings must be a list")
+    for binding in input_bindings:
+        if not isinstance(binding, dict):
+            raise ValidationError("packet input binding must be an object")
+        input_path = resolve_in_workspace(workspace_root, binding.get("path", ""))
+        if not input_path.is_file():
+            raise ValidationError("packet input is missing")
+        current_digest = sha256_file(input_path)
+        if current_digest != binding.get("sha256"):
+            raise ValidationError("packet input was replaced after packet creation")
+        current_png = png_metadata(input_path)
+        if current_png != binding.get("png"):
+            raise ValidationError("packet input PNG metadata changed")
+        verified = deepcopy(binding)
+        verified["path"] = workspace_relative(workspace_root, input_path)
+        verified_inputs.append(verified)
+
+    result_path = resolve_in_workspace(workspace_root, result)
+    if not result_path.exists():
         return mark_blocked(
             run,
             reason_code="generated_result_missing",
             action=run["next_action"],
-            message=f"Generated result does not exist: {path}",
+            message=f"Generated result does not exist: {result_path}",
             retryable=True,
         )
-    if not path.is_file() or not os.access(path, os.R_OK):
+    if not result_path.is_file() or not os.access(result_path, os.R_OK):
         return mark_blocked(
             run,
             reason_code="generated_result_unreadable",
             action=run["next_action"],
-            message=f"Generated result is unreadable: {path}",
+            message=f"Generated result is unreadable: {result_path}",
             retryable=True,
         )
-
     from runtime_preflight import validate_image_file
 
-    valid, detail = validate_image_file(path)
+    valid, detail = validate_image_file(result_path)
     if not valid:
         return mark_blocked(
             run,
@@ -501,7 +741,84 @@ def _record_generated_cli(
             message=f"Generated image is invalid: {detail}",
             retryable=True,
         )
-    return mark_generated(run, result)
+
+    attestation = _load_host_attestation(host_attestation, workspace_root)
+
+    result_binding = file_binding(workspace_root, result_path)
+    receipt: dict[str, Any] = {
+        "schema_version": 1,
+        "run_id": run["run_id"],
+        "iteration": run["iteration"] + 1,
+        "packet_id": packet_data["packet_id"],
+        "packet_sha256": packet_digest(packet_data),
+        "action": packet_data["action"],
+        "fallback_policy": packet_data["fallback_policy"],
+        "input_bindings": verified_inputs,
+        "result": result_binding,
+        "result_sha256": result_binding["sha256"],
+        "created_at": _utc_now(),
+        "host_attestation": attestation,
+    }
+    receipt["receipt_id"] = receipt_digest(receipt)
+
+    destination = resolve_in_workspace(workspace_root, receipt_path)
+    protected_paths = {
+        resolve_in_workspace(workspace_root, binding["path"]).resolve()
+        for binding in verified_inputs
+    }
+    protected_paths.add(result_path.resolve())
+    if destination.resolve() in protected_paths:
+        raise ValidationError("receipt path collides with a bound artifact")
+    if destination.exists():
+        raise ValidationError(f"refusing to overwrite existing receipt: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with destination.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(receipt, indent=2, ensure_ascii=False) + "\n")
+    except FileExistsError as exc:
+        raise ValidationError(
+            f"refusing to overwrite existing receipt: {destination}"
+        ) from exc
+    updated = mark_generated(
+        run,
+        result_binding["path"],
+        receipt=receipt,
+    )
+    updated["current_receipt_path"] = workspace_relative(
+        workspace_root, destination
+    )
+    updated["history"][-1]["receipt_id"] = receipt["receipt_id"]
+    return updated
+
+
+def _record_generated_cli(
+    run: dict[str, Any],
+    result: str,
+    *,
+    dry_run: bool,
+    packet: dict[str, Any] | Path | str | None = None,
+    receipt_path: Path | str | None = None,
+    host_attestation: dict[str, Any] | Path | str | None = None,
+) -> dict[str, Any]:
+    if dry_run:
+        return mark_generated(run, result)
+
+    if run.get("auditable") is not True:
+        raise ValidationError(
+            "real mark-generated requires an auditable run; use --dry-run only for fixtures"
+        )
+    if packet is None or receipt_path is None or host_attestation is None:
+        raise ValidationError(
+            "real auditable mark-generated requires --packet, --receipt, "
+            "and --host-attestation"
+        )
+    return _record_auditable_generation(
+        run,
+        result,
+        packet=packet,
+        receipt_path=receipt_path,
+        host_attestation=host_attestation,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -530,6 +847,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generated.add_argument("--run", required=True, type=Path)
     generated.add_argument("--result", required=True)
+    generated.add_argument("--packet")
+    generated.add_argument("--receipt")
+    generated.add_argument("--host-attestation")
     generated.add_argument(
         "--dry-run",
         action="store_true",
@@ -578,27 +898,52 @@ def main(argv: list[str] | None = None) -> int:
             )
             save_run(args.output, run)
         elif args.command == "mark-generated":
-            run = load_run(args.run)
-            run = _record_generated_cli(
-                run,
-                args.result,
-                dry_run=args.dry_run,
-            )
-            save_run(args.run, run)
+            if not args.dry_run and not all(
+                (args.packet, args.receipt, args.host_attestation)
+            ):
+                raise ValidationError(
+                    "real mark-generated requires --packet, --receipt, "
+                    "and --host-attestation"
+                )
+            with _exclusive_run_lock(args.run):
+                run = load_run(args.run)
+                if run.get("auditable"):
+                    resolve_in_workspace(
+                        run["workspace_root"], args.run.expanduser().resolve()
+                    )
+                run = _record_generated_cli(
+                    run,
+                    args.result,
+                    dry_run=args.dry_run,
+                    packet=args.packet,
+                    receipt_path=args.receipt,
+                    host_attestation=args.host_attestation,
+                )
+                save_run(args.run, run)
         elif args.command == "apply-qa":
-            run = load_run(args.run)
-            run = apply_qa_from_path(run, args.qa)
-            save_run(args.run, run)
+            with _exclusive_run_lock(args.run):
+                run = load_run(args.run)
+                qa_path = args.qa
+                if run.get("auditable"):
+                    resolve_in_workspace(
+                        run["workspace_root"], args.run.expanduser().resolve()
+                    )
+                    qa_path = resolve_in_workspace(
+                        run["workspace_root"], args.qa
+                    )
+                run = apply_qa_from_path(run, qa_path)
+                save_run(args.run, run)
         elif args.command == "mark-blocked":
-            run = load_run(args.run)
-            run = mark_blocked(
-                run,
-                reason_code=args.reason_code,
-                action=args.action,
-                message=args.message,
-                retryable=args.retryable,
-            )
-            save_run(args.run, run)
+            with _exclusive_run_lock(args.run):
+                run = load_run(args.run)
+                run = mark_blocked(
+                    run,
+                    reason_code=args.reason_code,
+                    action=args.action,
+                    message=args.message,
+                    retryable=args.retryable,
+                )
+                save_run(args.run, run)
         elif args.command == "status":
             run = load_run(args.run)
             print(json.dumps(run, indent=2, ensure_ascii=False))

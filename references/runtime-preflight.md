@@ -20,6 +20,8 @@ For every selected production input, preflight verifies:
 - required support references exist;
 - image format is supported;
 - image payload can be decoded by the guaranteed runtime validator.
+- every selected input remains inside the declared workspace root;
+- SHA-256 and PNG metadata are captured for the Host Action Packet.
 
 The current zero-dependency guaranteed format is PNG. Unsupported formats block instead of being treated as valid by filename alone.
 
@@ -30,6 +32,7 @@ The current zero-dependency guaranteed format is PNG. Unsupported formats block 
 - `reference_unreadable`
 - `reference_image_invalid`
 - `reference_sufficiency_failed`
+- `path_outside_workspace`
 
 A failed preflight must be persisted as `BLOCKED`. It must never emit an imagegen action.
 
