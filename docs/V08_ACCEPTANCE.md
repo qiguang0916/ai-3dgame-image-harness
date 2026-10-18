@@ -27,6 +27,6 @@ This is an expected safe refusal, not a claim of commercial acceptance. User app
 
 ## Production test and release boundary
 
-The legacy v0.7 unit suite was **136 PASS** prior to v0.8 changes. v0.8 adds new binary-GLB, view, store-dimension, fake Unity attestation and provenance regression tests. GitHub CI and final complete test count are recorded separately after commit.
+The full v0.8 suite is **145/145 PASS**, static examples **PASS**, legacy execution dry-run **PASS**, Skill Creator **PASS**, and GitHub Actions on PR #8 **PASS** (2026-10-18). All tests use synthetic fixtures or verified read-only historical evidence; this does NOT replace new real Host ImageGen/Unity screenshots.
 
 **Not tested:** new OpenAI ImageGen results, automated host-invocation reliability, real repaired KNIFE images, material consistency in Unity, Steam game publication. Do not claim v1.0 until these tests and independent visual review complete.
