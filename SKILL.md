@@ -45,3 +45,15 @@ python3 scripts/demo_e2e.py
 
 Additional reference-selection policy: `references/reference-sufficiency.md`.
 Failure persistence: `references/host-failure-protocol.md`.
+
+## v0.7 — optional intelligent reference and prompt preparation
+
+For tasks with many references, uncertain hidden details or difficult style
+consistency, read `references/v07-prompt-intelligence.md`.
+Use `styles` to choose a small game-art preset, and `reference-review` to
+create a SHA-bound **host visual inspection request**. The Host must actually
+inspect pixels and supply visible facts/unknowns; local code does not recognize
+objects or infer dimensions. Run `prompt-check` before `init`.
+`prompt_intelligence` is opt-in, with approved Master and hard locks always
+above style inspiration. Never substitute gallery prompts for an approved
+reference; no extra API or local generation engine.

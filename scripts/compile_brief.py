@@ -176,6 +176,10 @@ def compile_brief(asset: dict[str, Any], edit: dict[str, Any]) -> str:
             lines.extend(f"  VISIBLE: {fact}" for fact in item["visible_facts"])
             lines.extend(f"  UNKNOWN / DO NOT INVENT: {unknown}" for unknown in item.get("unknowns",[]))
 
+    if edit.get("prompt_intelligence"):
+        from prompt_control import format_prompt_intelligence
+        lines.extend(["", format_prompt_intelligence(asset, edit)])
+
     if provisional_fields:
         lines.extend(["", "PROVISIONAL / UNKNOWN FIELDS:"])
         lines.extend(f"- {item}" for item in provisional_fields)

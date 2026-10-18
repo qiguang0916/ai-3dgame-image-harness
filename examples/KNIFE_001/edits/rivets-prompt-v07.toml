@@ -1,0 +1,54 @@
+document_type = "edit_request"
+schema_version = 1
+request_id = "KNIFE_001_EDIT_RIVETS_V07"
+asset_id = "KNIFE_001"
+operation = "local_edit"
+target = "the three existing handle rivets only"
+change = "Change only the rivet surface finish to subtle brushed cold-silver steel; non-mirror, restrained linear brushing."
+
+[execution]
+edit_target_reference_id = "ASSEMBLED_MASTER"
+
+[preserve]
+hard = [
+  "exact blade broad silhouette",
+  "exact handle outer silhouette",
+  "exact rivet count: three",
+  "exact rivet centers",
+  "rivet diameter relationship",
+  "bolster geometry",
+  "butt-cap relationship",
+  "camera/projection and crop"
+]
+soft = [
+  "wood color",
+  "wood grain direction",
+  "blade finish",
+  "studio lighting",
+  "background"
+]
+
+[[reference_bindings]]
+reference_id = "ASSEMBLED_MASTER"
+roles = ["identity", "material", "color", "camera"]
+
+[[reference_bindings]]
+reference_id = "HANDLE_L_OUTER_MASTER"
+roles = ["geometry", "silhouette", "part_layout", "material"]
+
+[output]
+purpose = "hero_prop_master_reference"
+view = "same_as_assembled_master"
+background = "same_as_assembled_master"
+
+# v0.7 static prompt-control example. The repository does not include actual
+# KNIFE_001 PNG masters, so real preflight and ImageGen are NOT demonstrated.
+[prompt_intelligence]
+mode = "guided"
+style_profile = "none"
+camera_change = false
+
+[prompt_intelligence.role_authority]
+# Both images declared material. For this rivet-only example, the approved
+# overall assembled Master is the material authority.
+material = "ASSEMBLED_MASTER"

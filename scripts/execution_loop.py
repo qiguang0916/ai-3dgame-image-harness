@@ -607,6 +607,14 @@ def init_from_paths(
     resolve_in_workspace(base_dir, edit_path.expanduser().resolve())
     run["workspace_root"] = str(base_dir)
     run["auditable"] = not dry_run
+    if not dry_run:
+        # Bind the parsed production specification to the run. The host must
+        # never receive a silently changed user intent after preflight.
+        from artifact_integrity import canonical_json_bytes, sha256_bytes
+        run["input_spec_sha256"] = {
+            "asset": sha256_bytes(canonical_json_bytes(asset_doc.data)),
+            "edit": sha256_bytes(canonical_json_bytes(edit_doc.data)),
+        }
     run["current_receipt"] = None
     run["asset_document_path"] = workspace_relative(
         base_dir, asset_path.expanduser().resolve()

@@ -12,6 +12,8 @@ from typing import Any
 
 from artifact_integrity import (
     packet_digest,
+    canonical_json_bytes,
+    sha256_bytes,
     resolve_in_workspace,
     workspace_relative,
 )
@@ -221,6 +223,14 @@ def build_action_packet(
         "budget": _budget_packet(run),
     }
 
+    if edit.get("prompt_intelligence"):
+        from prompt_control import resolve_role_authority
+        packet["prompt_intelligence"] = {
+            "mode": "guided",
+            "selected_style_profile": edit["prompt_intelligence"].get("style_profile", "none"),
+            "role_authority": resolve_role_authority(asset, edit),
+            "observations": deepcopy(edit["prompt_intelligence"].get("observations", [])),
+        }
     if edit.get("region_contract"):
         packet["region_contract"] = deepcopy(edit["region_contract"])
     if edit.get("art_direction"):
@@ -388,6 +398,18 @@ def build_from_paths(
         for doc in (asset_doc, edit_doc):
             validate_document(doc.data, doc.path)
         cross_validate([asset_doc, edit_doc])
+
+        digest_binding = run.get("input_spec_sha256")
+        if run.get("auditable") and digest_binding is not None:
+            actual = {
+                "asset": sha256_bytes(canonical_json_bytes(asset_doc.data)),
+                "edit": sha256_bytes(canonical_json_bytes(edit_doc.data)),
+            }
+            if actual != digest_binding:
+                raise ValidationError(
+                    "asset or edit specification changed after run initialization; "
+                    "start a new auditable run rather than silently altering prompt"
+                )
 
         packet = build_action_packet(asset_doc.data, edit_doc.data, run)
         if run.get("auditable") and str(packet.get("action", "")).startswith(

@@ -341,6 +341,8 @@ def validate_edit_request(data: dict[str, Any], path: Path) -> None:
     from game_art_contract import validate_art_and_output
     validate_region_contract(data, where)
     validate_art_and_output(data, where)
+    from prompt_control import validate_prompt_control_schema
+    validate_prompt_control_schema(data, where)
 
     bindings = data.get("reference_bindings", [])
     if operation != "create" and not bindings:
@@ -560,6 +562,9 @@ def cross_validate(documents: list[LoadedDocument]) -> None:
                 raise ValidationError(
                     f"{doc.path}: reference evidence '{ref_id}' claims roles absent from selected binding"
                 )
+
+        from prompt_control import validate_prompt_control_bindings
+        validate_prompt_control_bindings(asset, data, str(doc.path))
 
         operation = data["operation"]
         if operation in OPERATIONS_REQUIRING_BASE_EDIT_TARGET:
