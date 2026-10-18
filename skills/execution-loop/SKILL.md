@@ -1,9 +1,9 @@
 ---
-name: game-image-execution-loop
-description: Use when a game-image task must run through real reference preflight, host-native image generation or editing, visual QA, bounded repair/regeneration, or a persistent BLOCKED outcome.
+name: ai-3dgame-image-harness-execution-loop
+description: Use when a ai-3dgame-image-harness task must run through real reference preflight, host-native image generation or editing, visual QA, bounded repair/regeneration, or a persistent BLOCKED outcome.
 ---
 
-# Game Image Execution Loop
+# AI 3D Game Image Harness Execution Loop
 
 ## Core rule
 

@@ -1,5 +1,5 @@
 ---
-name: game-image-delta-edit
+name: ai-3dgame-image-harness-delta-edit
 description: Route game image changes to the smallest safe edit. Use for local material/color/part corrections, repair prompts, and edit-vs-regenerate decisions.
 ---
 

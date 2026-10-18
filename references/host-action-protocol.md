@@ -1,6 +1,6 @@
 # Host Action Protocol
 
-The Host Action Packet is the machine-readable contract between deterministic game-image logic and the Agent/host that can call image tools.
+The Host Action Packet is the machine-readable contract between deterministic ai-3dgame-image-harness logic and the Agent/host that can call image tools.
 
 Generate it with:
 

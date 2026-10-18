@@ -1,6 +1,6 @@
 # OpenAI Imagegen Delegation
 
-This project treats OpenAI/Codex `imagegen` as an execution backend, not as logic that should be copied into game-image.
+This project treats OpenAI/Codex `imagegen` as an execution backend, not as logic that should be copied into ai-3dgame-image-harness.
 
 Official source:
 - https://github.com/openai/skills/blob/main/skills/.system/imagegen/SKILL.md
@@ -15,11 +15,11 @@ When the host has the official system imagegen skill:
 - never switch to the fallback CLI merely because a built-in call fails;
 - CLI/API fallback is explicit-only and may require an API key.
 
-game-image should not implement a shadow OpenAI API client just to reproduce behavior already owned by the official skill.
+ai-3dgame-image-harness should not implement a shadow OpenAI API client just to reproduce behavior already owned by the official skill.
 
 ## Separation of responsibilities
 
-game-image owns:
+ai-3dgame-image-harness owns:
 
 - approved Master Reference selection;
 - reference roles;
@@ -38,7 +38,7 @@ imagegen owns:
 
 ## Prompt handoff
 
-Pass the compiled game-image brief as the authoritative visual specification.
+Pass the compiled ai-3dgame-image-harness brief as the authoritative visual specification.
 
 Do not append a second competing art direction prompt.
 
@@ -57,6 +57,6 @@ The run state must point to the persisted selected result, not an ephemeral prev
 
 ## Future model changes
 
-Do not hard-code a GPT Image model name in the core game-image workflow.
+Do not hard-code a GPT Image model name in the core ai-3dgame-image-harness workflow.
 
-The official imagegen layer should absorb model/version changes. game-image stays focused on game-asset production constraints.
+The official imagegen layer should absorb model/version changes. ai-3dgame-image-harness stays focused on game-asset production constraints.

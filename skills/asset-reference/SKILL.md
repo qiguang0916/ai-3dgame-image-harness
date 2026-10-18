@@ -1,5 +1,5 @@
 ---
-name: game-image-asset-reference
+name: ai-3dgame-image-harness-asset-reference
 description: Manage approved game-asset masters and a reference atlas. Use before generation or editing when multiple images define identity, geometry, material, camera, or component interfaces.
 ---
 

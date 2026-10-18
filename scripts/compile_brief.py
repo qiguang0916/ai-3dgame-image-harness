@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile a backend-neutral game-image brief from asset + edit TOML files."""
+"""Compile a backend-neutral ai-3dgame-image-harness brief from asset + edit TOML files."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def compile_brief(asset: dict[str, Any], edit: dict[str, Any]) -> str:
     if asset["asset_id"] != edit["asset_id"]:
         raise ValidationError("asset_id mismatch between manifest and edit request")
 
-    reference_by_id = {ref["id"]: ref for ref in asset["references"]}
+    reference_by_id = {ref["id"]: ref for ref in asset.get("references", [])}
     reference_lines: list[str] = []
     for index, binding in enumerate(edit.get("reference_bindings", []), start=1):
         ref = reference_by_id[binding["reference_id"]]
@@ -147,6 +147,34 @@ def compile_brief(asset: dict[str, Any], edit: dict[str, Any]) -> str:
                 "- Allowed visible details that are not structural components: "
                 + ", ".join(topology["allowed_visible_details"])
             )
+
+    region_contract = edit.get("region_contract")
+    if region_contract:
+        lines.extend(["", "EDIT REGION CONTRACT (normalized 0..1 image coordinates):"])
+        for item in region_contract.get("targets", []):
+            lines.append(f"- EDITABLE {item['id']}: bbox={item['bbox']}")
+        for item in region_contract.get("protected", []):
+            lines.append(f"- PROTECTED {item['id']}: bbox={item['bbox']}")
+        lines.append("- Keep regions outside the allowed edits unchanged as far as imagegen allows.")
+        lines.append("- Region coordinates are QA guidance; do not claim a native mask unless the host supports it.")
+
+    art=edit.get("art_direction")
+    if art:
+        lines.extend(["", "ART DIRECTION:"])
+        for key in ("purpose","style_family","camera","lighting","game_scale_read"):
+            lines.append(f"- {key}: {art[key]}")
+        for key in ("palette","material_notes"):
+            lines.append(f"- {key}: " + ", ".join(art[key]))
+        if art.get("must_match"):
+            lines.append("- This art direction is a mandatory Visual QA hard gate.")
+
+    visual_evidence=edit.get("reference_evidence")
+    if visual_evidence and visual_evidence.get("observations"):
+        lines.extend(["", "REFERENCE VISUAL EVIDENCE (host-declared observations):"])
+        for item in visual_evidence["observations"]:
+            lines.append(f"- {item['reference_id']} roles: " + ", ".join(item["roles"]))
+            lines.extend(f"  VISIBLE: {fact}" for fact in item["visible_facts"])
+            lines.extend(f"  UNKNOWN / DO NOT INVENT: {unknown}" for unknown in item.get("unknowns",[]))
 
     if provisional_fields:
         lines.extend(["", "PROVISIONAL / UNKNOWN FIELDS:"])

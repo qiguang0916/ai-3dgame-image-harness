@@ -62,3 +62,22 @@ reference_digest = "<approved reference sha256>"
 ~~~
 
 Do not use keyword matching as visual evidence. The host must inspect the actual output and references.
+
+## v0.6 measurable image-quality gates
+
+If `edit_request.region_contract.mode = "enforce"`, include
+`visual.region_preservation` (Hard Gate). The Harness measures the actual
+reference/result pixels again at `apply-qa`; hand-written PASS cannot override
+a measured FAIL or NOT_VERIFIABLE. See `region-quality.md`.
+
+If `output.expected_size` or `output.require_transparency` is specified,
+include `image.technical_output` (Hard Gate). The Harness checks actual PNG
+dimensions/alpha again at `apply-qa`. See `technical-output.md`.
+
+If `art_direction.must_match = true`, include `art_direction.consistency`;
+this requires the host's real-pixel visual inspection, not fake deterministic
+aesthetic scoring.
+
+QA must distinguish `measured change` from `observed failure`.
+Image drift percentages alone do not prove a bad image; illumination, shadows
+and normal imagegen variation also alter pixels.

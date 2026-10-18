@@ -1,119 +1,105 @@
-# game-image
+# AI 3D Game Image Harness
 
-Game Image 是面向 ChatGPT / Codex 的游戏图片生产控制层。它不在本地跑图片模型；它负责把图片任务变成可验证的 reference、topology、QA 和状态机契约。
+**Current development branch: v0.6 — Professional Game Asset Production.**
 
-## v0.5
+This is a Codex/OpenAI **game image production Skill and auditable QA harness**, **not** an image generation model. The official built-in OpenAI `$imagegen` is the sole default image generation/editing backend. No API key, paid fallback, local diffusion model, or GPU inference runtime is introduced by this project.
 
-v0.5 在 v0.4 状态机基础上增加可审计执行：
+Repository: https://github.com/qiguang0916/ai-3dgame-image-harness
 
-- real runtime reference preflight；
-- explicit edit target；
-- reference sufficiency / provisional facts / prohibited assumptions；
-- generic component topology contract；
-- required hard-gate completeness；
-- `NOT_VERIFIABLE`；
-- host/backend blocker persistence；
-- Host Action Packet v3 for auditable real runs (legacy dry-run packets remain v2)；
-- bounded repair/regeneration；
-- no automatic API/CLI fallback；
-- Packet/input/result SHA-256 execution receipt；
-- workspace-bound portable/resolved paths；
-- QA/receipt/result digest binding；
-- explicit topology count semantics；
-- candidate → Master QA → immutable approved revision。
+## 能解决什么
 
-## 三种验证层级
+- **从零生成首张 Master**：`bootstrap → imagegen_generate → Receipt → Visual QA → Candidate → Approved First Master → Active Manifest`。
+- **已有素材精细修改**：选择当前批准参考图，按 Delta Brief 修改局部，保护指定区域。
+- **游戏美术规范**：按视觉风格、材质、配色、光照、相机和游戏实际展示尺寸构造专业提示词；借鉴 Apache-2.0 的 Create Game Assets 方法，不强制安装第三方 Skill。
+- **证据驱动 QA**：图像实际像素变化、组件/拓扑视觉检查、PNG 大小/透明通道、Master/Receipt SHA-256 绑定。
+- **修复与重大重生成**：局部缺陷走 REPAIR_MINOR；结构问题走 REGENERATE_MAJOR；不可验证的情况 BLOCKED，预算有限制。
 
-**Static**
+## 一条命令入口
 
-~~~bash
-python3 scripts/validate_project.py
-~~~
+在本仓库下：
 
-只验证 Schema 和跨文档关系，不要求二进制图片。
+```bash
+./bin/ai-3dgame-image-harness doctor
+./bin/ai-3dgame-image-harness version
+./bin/ai-3dgame-image-harness validate
+./bin/ai-3dgame-image-harness master --help
+./bin/ai-3dgame-image-harness region-qa --help
+```
 
-**Dry-run**
+`doctor` 的 `ready` 仅代表确定性 QA 依赖齐备；**不能证明当前 Codex Host 有 ImageGen**。
 
-~~~bash
-python3 scripts/demo_e2e.py
-~~~
+### 从零创建第一个 Master
 
-验证状态机/Packet 路由，不证明真实图片 Host E2E。
+从 `examples/BOOTSTRAP_PROP_001/asset-bootstrap.toml` 和 `create.toml` 开始：
 
-**Real runtime**
+```bash
+./bin/ai-3dgame-image-harness init \
+  --asset <bootstrap-asset.toml> --edit <create.toml> \
+  --output <runs/create.json> --workspace-root <workspace>
+./bin/ai-3dgame-image-harness next \
+  --asset <bootstrap-asset.toml> --edit <create.toml> --run <runs/create.json> \
+  > <packets/01.json>
+```
 
-~~~bash
-python3 scripts/execution_loop.py init \
-  --asset <asset.toml> \
-  --edit <edit.toml> \
-  --output <run.json>
-~~~
+由 **Codex 宿主内置 `$imagegen`** 执行 Packet 的 `imagegen_generate`，保存真实 PNG。再按 `references/execution-receipt.md` 记录并实际检查像素，写完整 QA，经 `qa` 转为 ACCEPTED，创建 Candidate：
 
-真实 run 默认检查 edit target 和 required references 是否存在、可读、可解码。只有测试 fixture 才显式使用 `--dry-run`。
+```bash
+./bin/ai-3dgame-image-harness master candidate \
+  --image <outputs/master-draft.png> --source-run <runs/create.json> \
+  --reference-id MASTER_R1 --revision 1 --out <candidate.json>
+./bin/ai-3dgame-image-harness master finalize \
+  --candidate <candidate.json> --qa <qa/master-qa.toml> \
+  --approved-image <references/master-r1.png> --out <approved.json>
+./bin/ai-3dgame-image-harness master register-first \
+  --bootstrap-asset <bootstrap-asset.toml> --decision <approved.json> \
+  --roles identity geometry material camera style \
+  --out <asset-active.toml>
+```
 
-## Host loop
+**严禁跳过真实生成、Host 视觉审核和批准，不能把 Candidate 当成 Approved Reference。** 完整说明：`references/first-master.md`。
 
-~~~bash
-python3 scripts/next_action.py --asset <asset.toml> --edit <edit.toml> --run <run.json>
-~~~
+### 精确局部编辑
 
-Packet action 只会是：
+在 `edit.toml` 内增加可选 `[region_contract]` 与 `[[region_contract.targets]]` / `[[region_contract.protected]]`，使用 0..1 坐标描述允许修改和受保护区域。此协议 **不声称宿主支持原生 Mask 编辑**，其主要价值是生成前的空间约束和生成后的客观检测。
 
-- `imagegen_generate`
-- `imagegen_edit`
-- `visual_qa`
-- `deliver`
-- `report_blocked`
+```bash
+./bin/ai-3dgame-image-harness region-qa \
+  --edit <edit.toml> --reference <approved-master.png> \
+  --result <edited.png> --output <region-report.json> \
+  --diff-image <diff-heatmap.png>
+```
 
-Host 必须服从 Packet 中的 edit target、references、requested delta、topology、reference sufficiency、required hard gates 和预算。
+`enforce` 模式下，`apply-qa` 会**重新读取、计算像素**，核验 `visual.region_preservation`，而不是相信手写的 PASS。参见 `references/region-quality.md`。
 
-图片成功持久化后：
+### 技术导出标准
 
-~~~bash
-python3 scripts/execution_loop.py mark-generated \
-  --run <run.json> --packet <packet.json> --result <image.png> \
-  --receipt <receipt.json> \
-  --host-attestation "Built-in imagegen executed this packet without fallback."
-~~~
+可在 `[output]` 设置可选 `expected_size = "1536x1024"`、`require_transparency = true/false`；`image.technical_output` 成为必需 Hard Gate：
 
-QA 后：
+```bash
+./bin/ai-3dgame-image-harness asset-report \
+  --edit <edit.toml> --image <edited.png> --out <technical-report.json>
+```
 
-~~~bash
-python3 scripts/execution_loop.py apply-qa --run <run.json> --qa <qa.toml>
-~~~
+详情：`references/technical-output.md`。
 
-Host/backend 失败：
+## 开发验证
 
-~~~bash
-python3 scripts/execution_loop.py mark-blocked \
-  --run <run.json> \
-  --reason-code host_native_imagegen_failed \
-  --action imagegen_edit \
-  --message "Built-in image edit failed."
-~~~
-
-## Contracts
-
-- `references/runtime-preflight.md`
-- `references/topology-contract.md`
-- `references/reference-sufficiency.md`
-- `references/visual-qa-contract.md`
-- `references/host-failure-protocol.md`
-- `references/host-action-protocol.md`
-- `references/openai-imagegen-delegation.md`
-- `references/execution-receipt.md`
-- `references/master-lifecycle.md`
-
-## Verification
-
-~~~bash
+```bash
+python3 -m pip install -r requirements-quality.txt  # macOS 已安装时无需重复执行
 python3 scripts/validate_project.py
 python3 -m unittest discover -s tests -v
 python3 scripts/demo_e2e.py
-~~~
+```
 
-GitHub Actions runs the same repository checks.
+真实 OpenAI ImageGen 只能由具备该能力的宿主执行。单元测试、模拟图片、Host attestation、静态校验都**不能单独证明真实模型输出质量**。
 
-## Remaining external verification
+## 向后兼容与目录
 
-A green dry-run does not equal a real Host Image E2E. Before v1.0, run a neutral asset such as `LAMP_001` in a Codex host with built-in imagegen, persist the real run/packet/QA/output, and reach `ACCEPTED` or a formal `BLOCKED`.
+- v0.5 manifests 不含新字段时，保留原有 Master/Receipt/Packet/QA 行为；
+- 旧运行目录 `.game-image/` 继续忽略，原有 E2E 证据不移动或删除；
+- 新本地运行结果建议使用 `.ai-3dgame-image-harness/`；
+- `$HOME/game-image` 可以作为旧版只读基线，当前项目在 `$HOME/ai-3dgame-image-harness`。
+
+## 真实验证边界
+
+离线 v0.6 回归可以验证全流程代码和区域 QA。新的真实 Host `$imagegen` E2E、重大结构再生成与复杂 `KNIFE_001` 参考资产仍须由当前 Mac Codex Host 分别执行；没有证据时不得宣称质量提升或 v1.0 READY。进度详情见 `docs/V06_ACCEPTANCE.md`。

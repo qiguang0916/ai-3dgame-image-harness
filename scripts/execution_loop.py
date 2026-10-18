@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persist and route the game-image execution state machine.
+"""Persist and route the ai-3dgame-image-harness execution state machine.
 
 This script never calls an image model. The Agent/host owns the image tool call.
 """
@@ -87,6 +87,11 @@ def init_run(
     if asset["asset_id"] != edit["asset_id"]:
         raise ValidationError("asset_id mismatch between manifest and edit request")
 
+    if asset.get("status") == "bootstrap" and (
+        edit["operation"] != "create" or edit.get("reference_bindings")
+    ):
+        raise ValidationError("bootstrap asset only supports create without production references")
+
     qa = asset.get("qa", {})
     max_repairs = qa.get("max_repair_passes", 2)
     max_regenerations = qa.get("max_regeneration_passes", 1)
@@ -114,6 +119,9 @@ def init_run(
         "max_repair_passes": max_repairs,
         "max_regeneration_passes": max_regenerations,
         "backend_mode": "host_native_imagegen",
+        "bootstrap_asset": asset.get("status") == "bootstrap",
+        "region_contract": deepcopy(edit.get("region_contract")),
+        "output_contract": deepcopy(edit.get("output", {})),
         "execution_mode": _execution_mode(operation),
         "current_result_path": None,
         "last_qa": None,
@@ -403,6 +411,33 @@ def apply_qa(
     )
     if run.get("auditable"):
         _validate_auditable_qa(run, qa)
+    region_result = None
+    contract = run.get("region_contract")
+    if run.get("auditable") and isinstance(contract, dict):
+        preflight = run.get("preflight") or {}
+        targets = [x for x in preflight.get("checks", []) if x.get("kind") == "edit_target"]
+        if len(targets) != 1:
+            raise ValidationError("region QA requires one bound original edit target")
+        from region_quality import verify_region_gate
+        from artifact_integrity import resolve_in_workspace
+        source_path = resolve_in_workspace(run["workspace_root"], targets[0]["path"])
+        result_path = resolve_in_workspace(run["workspace_root"], run["current_result_path"])
+        gate = next((g for g in qa.get("gates",[]) if g.get("name") == "visual.region_preservation"),{})
+        region_result = verify_region_gate(contract, source_path, result_path, gate.get("status", ""))
+        if region_result["status"] == "FAIL" and qa.get("status") in {"PASS","PASS_WITH_NOTES"}:
+            raise ValidationError("deterministic region QA FAIL forbids overall PASS")
+
+    output_result = None
+    if run.get("auditable"):
+        output_contract = run.get("output_contract") or {}
+        if "expected_size" in output_contract or "require_transparency" in output_contract:
+            from asset_report import verify_output_gate
+            from artifact_integrity import resolve_in_workspace
+            result_path = resolve_in_workspace(run["workspace_root"], run["current_result_path"])
+            gate = next((g for g in qa.get("gates", []) if g.get("name")=="image.technical_output"),{})
+            output_result = verify_output_gate(output_contract, result_path, gate.get("status",""))
+            if output_result["status"] == "FAIL" and qa.get("status") in {"PASS","PASS_WITH_NOTES"}:
+                raise ValidationError("deterministic technical QA FAIL forbids overall PASS")
 
     qa_status = qa["status"]
     updated = deepcopy(run)
@@ -421,6 +456,10 @@ def apply_qa(
     for key in ("run_id", "iteration", "receipt_id", "result_sha256"):
         if key in qa:
             updated["last_qa"][key] = qa[key]
+    if region_result is not None:
+        updated["last_qa"]["region_quality"] = region_result
+    if output_result is not None:
+        updated["last_qa"]["technical_output"] = output_result
 
     required_statuses = _required_gate_statuses(run, qa)
     if any(

@@ -1,0 +1,41 @@
+document_type = "edit_request"
+schema_version = 1
+request_id = "LOCAL_MATERIAL_EDIT_001"
+asset_id = "FIRST_GAME_ASSET_001"
+operation = "local_edit"
+target = "the existing local material feature"
+change = "Recolor only the selected target material without changing geometry."
+
+[execution]
+edit_target_reference_id = "MASTER_R1"
+
+[preserve]
+hard = ["visible silhouette", "part centers", "camera"]
+soft = ["overall light level", "background tone"]
+
+[reference_sufficiency]
+required_roles = ["identity", "geometry", "camera"]
+allow_provisional = false
+provisional_fields = []
+prohibited_assumptions = ["unseen internal details"]
+
+[region_contract]
+mode = "report"
+pixel_threshold = 15
+max_outside_changed_fraction = 0.08
+
+[[region_contract.targets]]
+id = "editable_detail"
+bbox = [0.30, 0.70, 0.55, 0.90]
+
+[[region_contract.protected]]
+id = "main_subject_body"
+bbox = [0.30, 0.10, 0.68, 0.62]
+max_changed_fraction = 0.12
+
+[[reference_bindings]]
+reference_id = "MASTER_R1"
+roles = ["identity", "geometry", "camera"]
+
+[output]
+purpose = "hero_prop_reference"

@@ -1,57 +1,47 @@
 ---
-name: game-image
-description: Use when creating, editing, repairing, or validating game-asset images that require approved references, structural consistency, controlled local edits, repeatable visual QA, or host-image execution without a local model.
+name: ai-3dgame-image-harness
+description: Use when creating a first game-art Master, editing or repairing game image assets through official OpenAI built-in imagegen, preserving approved references and protected regions, and verifying topology, art direction and PNG quality with auditable QA.
 ---
 
-# Game Image
+# AI 3D Game Image Harness
 
-## Overview
+This is a professional game image-production contract and QA harness, not a drawing model. OpenAI/Codex built-in `$imagegen` performs all real generation and AI editing. No local generation model, automatic API/CLI fallback, or API key is required.
 
-Treat game-image generation as a controlled production run, not a one-shot prompt. Approved references and declared contracts are the source of truth; the host image model is only the executor.
+## Workflow selection
 
-## Core invariants
+- **First Master:** `status="bootstrap"` + `operation="create"`; auditable ImageGen → actual-pixel QA → candidate → immutable approved image → `master register-first`. See `references/first-master.md`.
+- **Existing approved Master:** declare reference roles, select the correct image edit target, compile a delta-only brief and preserve hard gates.
+- **Local precision:** optional `[region_contract]` declares editable and protected boxes, measured after generation. `enforce` re-checks actual pixel diffs at `apply-qa`. See `references/region-quality.md`.
+- **Structural tasks:** declare required component counts and visible relations, and explicit unknown details. Optional `reference_evidence` keeps visual role claims reviewable.
+- **Art direction:** optional `[art_direction]` specifies style, palette, materials, lighting, camera and game-scale legibility. See `references/game-art-direction.md`.
+- **Technical game asset:** optional PNG dimensions and transparency checks. See `references/technical-output.md`.
 
-- Never promote draft/rejected/superseded references into production inputs.
-- Real runs perform runtime preflight; use `--dry-run` only for fixtures/examples.
-- Edit-like operations use an explicit edit target.
-- Host Action Packets are authoritative for target, references, contracts, budgets, and next transition.
-- Real generation is auditable: the packet, bound inputs, result, and host attestation produce an execution receipt.
-- A Master candidate is never production authority until real-pixel Master QA explicitly approves and promotes a new immutable revision.
-- Required hard gates must be explicitly verified before acceptance.
-- Topology failures regenerate; localized defects may repair; unavailable evidence/backend blocks.
-- Never auto-switch to API/CLI fallback.
-- Repair and regeneration remain bounded.
+## Non-negotiables
 
-## Workflow
+- Approved references are role-specific authorities. Candidate, draft and rejected references are never production inputs.
+- The issued Host Action Packet controls exactly what the image model receives.
+- Real runs require preflight, input/output digests, execution receipt, and Host attestation; attestation does not establish proprietary model identity.
+- Host must inspect real pixels; required hard gates cannot be missing or marked PASS without evidence. Deterministic region/output checks independently re-read pixels and reject fabricated PASS.
+- Local defect → REPAIR, required topology failure → REGENERATE, unverifiable evidence/backend → BLOCKED.
+- Repair/regeneration passes are bounded. Never silently weaken rules or switch to paid API/CLI/local generation.
+- Do not treat synthetic fixtures or dry-run as real ImageGen E2E.
 
-1. Validate schema: `python3 scripts/validate_project.py`.
-2. Initialize a real run with `scripts/execution_loop.py init`; preflight may block it.
-3. Read the next packet from `scripts/next_action.py`.
-4. Execute only the packet action with the host-native image tool.
-5. Persist the selected output, then `mark-generated` with its packet, receipt path, and short host attestation.
-6. When the packet says `visual_qa`, inspect actual pixels and write a digest-bound, evidence-complete QA TOML.
-7. `apply-qa`, then repeat until `deliver` or `report_blocked`.
+## Host loop
 
-## Load detailed contracts when relevant
+`./bin/ai-3dgame-image-harness doctor` → `validate` → `init` → `next` → **host-native ImageGen** → `generated` (receipt) → actual-pixel QA → `qa` (apply) → deliver/repair/regenerate/block.
 
-- Runtime inputs: `references/runtime-preflight.md`
-- Structural assets: `references/topology-contract.md`
-- Minimum evidence / unknowns: `references/reference-sufficiency.md`
-- QA report completeness and routing: `references/visual-qa-contract.md`
-- Host/backend failure: `references/host-failure-protocol.md`
-- Packet fields and execution: `references/host-action-protocol.md`
-- Execution receipt and artifact binding: `references/execution-receipt.md`
-- Master candidate approval: `references/master-lifecycle.md`
-- OpenAI/Codex delegation: `references/openai-imagegen-delegation.md`
+For first Master, finalize the independent QA promotion before registering an active manifest.
 
-Subskills cover reference selection, delta edits, visual QA, and the execution loop under `skills/`.
+Read on demand:
+`references/runtime-preflight.md`, `references/reference-evidence-review.md`, `references/topology-contract.md`, `references/host-action-protocol.md`, `references/execution-receipt.md`, `references/visual-qa-contract.md`, `references/master-lifecycle.md`, `references/openai-imagegen-delegation.md`.
 
 ## Verification
 
-~~~bash
+```bash
 python3 scripts/validate_project.py
 python3 -m unittest discover -s tests -v
 python3 scripts/demo_e2e.py
-~~~
+```
 
-A dry-run proves orchestration only. A real Host Image E2E requires real reference files plus a host-native image tool.
+Additional reference-selection policy: `references/reference-sufficiency.md`.
+Failure persistence: `references/host-failure-protocol.md`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Topology contract helpers for game-image."""
+"""Topology contract helpers for ai-3dgame-image-harness."""
 
 from __future__ import annotations
 
@@ -195,6 +195,18 @@ def expected_hard_gates(
             seen.add(gate)
             result.append(gate)
 
+    if edit.get("region_contract", {}).get("mode") == "enforce":
+        if "visual.region_preservation" not in seen:
+            result.append("visual.region_preservation")
+            seen.add("visual.region_preservation")
+    if edit.get("art_direction", {}).get("must_match",False):
+        if "art_direction.consistency" not in seen:
+            result.append("art_direction.consistency")
+            seen.add("art_direction.consistency")
+    output = edit.get("output",{})
+    if "expected_size" in output or "require_transparency" in output:
+        if "image.technical_output" not in seen:
+            result.append("image.technical_output")
     return result
 
 

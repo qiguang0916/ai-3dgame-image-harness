@@ -17,7 +17,7 @@ class ValidateProjectTests(unittest.TestCase):
     def test_repository_examples_validate(self) -> None:
         paths = validator.iter_toml_paths([str(ROOT / "examples")])
         documents = validator.validate_paths(paths)
-        self.assertEqual(3, len(documents))
+        self.assertGreaterEqual(len(documents), 5)  # legacy KNIFE + v0.6 bootstrap example
 
     def test_duplicate_reference_is_rejected(self) -> None:
         data = {

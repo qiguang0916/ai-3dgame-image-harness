@@ -81,3 +81,14 @@ make the new reference `primary_master`. `validate_project.py` rejects partial
 lineage and an approved enhanced Master whose predecessor is not superseded.
 
 No command silently overwrites a candidate, Master image, or decision record.
+
+## v0.6: no prior Master
+
+For the *first* Master, create the asset as `status="bootstrap"` without a
+`primary_master`, call the native host image tool through the usual auditable
+`create` run, and complete required actual-pixel QA.
+
+Use `master candidate --revision 1` **without** `--supersedes`, then
+`master finalize` and `master register-first` to write a **new** active
+manifest. Only after this may normal production edits bind the new Master.
+See `references/first-master.md`.

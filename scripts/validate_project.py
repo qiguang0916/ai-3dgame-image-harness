@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate game-image TOML manifests with Python standard library only."""
+"""Validate ai-3dgame-image-harness TOML manifests with Python standard library only."""
 
 from __future__ import annotations
 
@@ -89,7 +89,10 @@ def ensure_string_list(value: Any, where: str, allow_empty: bool = False) -> lis
 def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
     where = str(path)
     require(data, "asset_id", where)
-    primary_master = require(data, "primary_master", where)
+    bootstrap = data.get("status") == "bootstrap"
+    primary_master = None if bootstrap else require(data, "primary_master", where)
+    if bootstrap and data.get("primary_master") is not None:
+        raise ValidationError(f"{where}: bootstrap assets cannot declare primary_master")
 
     locks = require(data, "locks", where)
     if not isinstance(locks, dict):
@@ -101,7 +104,9 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
         allow_empty=True,
     )
 
-    references = require(data, "references", where)
+    references = data.get("references", []) if bootstrap else require(data, "references", where)
+    if bootstrap and references:
+        raise ValidationError(f"{where}: bootstrap must have no production references")
     if not isinstance(references, list):
         raise ValidationError(f"{where}: references must be an array of tables")
 
@@ -128,12 +133,19 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
             raise ValidationError(f"{rwhere}: duplicate reference roles")
 
         lineage_fields = MASTER_LINEAGE_FIELDS.intersection(ref)
-        if lineage_fields and lineage_fields != MASTER_LINEAGE_FIELDS:
-            missing = ", ".join(sorted(MASTER_LINEAGE_FIELDS - lineage_fields))
+        base_lineage = MASTER_LINEAGE_FIELDS - {"supersedes"}
+        required_lineage = (
+            base_lineage if ref.get("revision") == 1
+            else MASTER_LINEAGE_FIELDS
+        )
+        if lineage_fields and not required_lineage.issubset(lineage_fields):
+            missing = ", ".join(sorted(required_lineage - lineage_fields))
             raise ValidationError(
                 f"{rwhere}: enhanced master lineage is missing: {missing}"
             )
         if lineage_fields:
+            if ref.get("revision") == 1 and "supersedes" in ref:
+                raise ValidationError(f"{rwhere}: first Master cannot supersede another")
             revision = ref["revision"]
             if (
                 isinstance(revision, bool)
@@ -143,9 +155,11 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
                 raise ValidationError(
                     f"{rwhere}: revision must be a positive integer"
                 )
-            for key in ("supersedes", "source_run_id", "source_qa_report_id"):
+            for key in ("source_run_id", "source_qa_report_id"):
                 require(ref, key, rwhere)
-            if ref["supersedes"] == ref_id:
+            if ref["revision"] > 1:
+                require(ref, "supersedes", rwhere)
+            if ref.get("supersedes") == ref_id:
                 raise ValidationError(f"{rwhere}: supersedes cannot reference itself")
             if not isinstance(ref["content_sha256"], str) or not SHA256_PATTERN.fullmatch(
                 ref["content_sha256"]
@@ -154,21 +168,24 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
                     f"{rwhere}: content_sha256 must be 64 lowercase hex characters"
                 )
 
-    if approved == 0:
-        raise ValidationError(f"{where}: at least one approved reference is required")
-    if primary_master not in ids:
-        raise ValidationError(
-            f"{where}: primary_master '{primary_master}' does not match a reference id"
-        )
-    if reference_by_id[primary_master].get("state") != "approved":
-        raise ValidationError(f"{where}: primary_master must be approved")
+    if not bootstrap:
+        if approved == 0:
+            raise ValidationError(f"{where}: at least one approved reference is required")
+        if primary_master not in ids:
+            raise ValidationError(
+                f"{where}: primary_master '{primary_master}' does not match a reference id"
+            )
+        if reference_by_id[primary_master].get("state") != "approved":
+            raise ValidationError(f"{where}: primary_master must be approved")
 
     successor_by_predecessor: dict[str, str] = {}
     lineage_edges: dict[str, str] = {}
     for ref_id, ref in reference_by_id.items():
         if not MASTER_LINEAGE_FIELDS.intersection(ref):
             continue
-        supersedes = ref["supersedes"]
+        supersedes = ref.get("supersedes")
+        if supersedes is None:
+            continue
         if supersedes in successor_by_predecessor:
             raise ValidationError(
                 f"{where}: reference '{supersedes}' has multiple successors: "
@@ -319,6 +336,11 @@ def validate_edit_request(data: dict[str, Any], path: Path) -> None:
             raise ValidationError(
                 f"{where}: qa_contract.required_hard_gates contains duplicates"
             )
+
+    from region_quality import validate_region_contract
+    from game_art_contract import validate_art_and_output
+    validate_region_contract(data, where)
+    validate_art_and_output(data, where)
 
     bindings = data.get("reference_bindings", [])
     if operation != "create" and not bindings:
@@ -489,8 +511,13 @@ def cross_validate(documents: list[LoadedDocument]) -> None:
         if asset is None:
             continue
 
+        if asset.get("status") == "bootstrap":
+            if data["operation"] != "create":
+                raise ValidationError(f"{doc.path}: bootstrap assets only allow create")
+            if data.get("reference_bindings") or data.get("execution", {}).get("edit_target_reference_id"):
+                raise ValidationError(f"{doc.path}: bootstrap cannot bind production inputs")
         reference_by_id = {
-            ref["id"]: ref for ref in asset["references"]
+            ref["id"]: ref for ref in asset.get("references", [])
         }
         bound_ids: set[str] = set()
 
@@ -516,6 +543,22 @@ def cross_validate(documents: list[LoadedDocument]) -> None:
                 raise ValidationError(
                     f"{doc.path}: reference_binding '{ref_id}' requests "
                     f"undeclared role(s): {joined}"
+                )
+
+        from game_art_contract import reference_visual_coverage
+        by_binding = {
+            bind["reference_id"]: set(bind["roles"])
+            for bind in data.get("reference_bindings", [])
+        }
+        for observation in data.get("reference_evidence", {}).get("observations", []):
+            ref_id = observation["reference_id"]
+            if ref_id not in by_binding:
+                raise ValidationError(
+                    f"{doc.path}: reference evidence '{ref_id}' is not a selected input"
+                )
+            if set(observation["roles"]) - by_binding[ref_id]:
+                raise ValidationError(
+                    f"{doc.path}: reference evidence '{ref_id}' claims roles absent from selected binding"
                 )
 
         operation = data["operation"]

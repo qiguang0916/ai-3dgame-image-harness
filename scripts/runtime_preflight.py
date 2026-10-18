@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime validation for real image inputs used by game-image."""
+"""Runtime validation for real image inputs used by ai-3dgame-image-harness."""
 
 from __future__ import annotations
 
@@ -113,12 +113,15 @@ def evaluate_reference_sufficiency(
     prohibited_assumptions = list(
         contract.get("prohibited_assumptions", [])
     )
+    from game_art_contract import reference_visual_coverage
+    visual = reference_visual_coverage(edit)
     status = (
-        "sufficient"
-        if not missing_roles
+        "insufficient" if visual["status"] == "insufficient"
+        else "sufficient" if not missing_roles
         else ("provisional" if allow_provisional else "insufficient")
     )
     return {
+        "visual_review": visual,
         "status": status,
         "required_roles": required_roles,
         "covered_roles": [

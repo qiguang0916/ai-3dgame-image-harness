@@ -40,3 +40,12 @@ python3 scripts/demo_e2e.py
 ~~~
 
 If adding a contract field, reason code, or state transition, update validator/state-machine tests.
+
+## v0.6 and naming
+
+- Canonical name: AI 3D Game Image Harness (`ai-3dgame-image-harness`).
+- Legacy `.game-image/` evidence must remain untouched and ignored.
+- Bootstrap manifests may only create images; production editing still requires approved references.
+- First-Master registration must verify source Run, Receipt, real-pixel QA and candidate lineage, not just a declared `approved` JSON.
+- Enforced region/technical-output QA must recompute real pixels; a handwritten PASS is not sufficient.
+- Do not confuse generated QA fixture images, local differential metrics or the self-declared Host attestation with independent real-model production evidence.

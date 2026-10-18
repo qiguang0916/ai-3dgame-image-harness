@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dry-run the full game-image host protocol without calling an image model."""
+"""Dry-run the full ai-3dgame-image-harness host protocol without calling an image model."""
 
 from __future__ import annotations
 

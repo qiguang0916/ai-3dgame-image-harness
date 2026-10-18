@@ -1,5 +1,5 @@
 ---
-name: game-image-visual-qa
+name: ai-3dgame-image-harness-visual-qa
 description: Use when accepting, repairing, regenerating, or blocking a generated game-asset image based on actual pixels, approved references, required hard gates, structural topology, and task-specific change requirements.
 ---
 

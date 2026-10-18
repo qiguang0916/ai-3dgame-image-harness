@@ -88,6 +88,16 @@ def compile_repair_brief(
     ]
     lines.extend(f"- {gate}" for gate in failed_gates or ["unspecified"])
 
+    measured=qa.get("region_quality")
+    if isinstance(measured, dict) and measured.get("failures"):
+        lines.extend(["", "MEASURED REGION FAILURES:"])
+        lines.extend(f"- {reason}" for reason in measured["failures"])
+        lines.append("- Repair only the failed areas and restore other pixels toward the approved Master.")
+    technical=qa.get("technical_output")
+    if isinstance(technical, dict) and technical.get("failures"):
+        lines.extend(["", "MEASURED TECHNICAL OUTPUT FAILURES:"])
+        lines.extend(f"- {reason}" for reason in technical["failures"])
+
     lines.extend(["", "CORRECTION DELTA:"])
     lines.extend(f"- {directive}" for directive in directives)
 

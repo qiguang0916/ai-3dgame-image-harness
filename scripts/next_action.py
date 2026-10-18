@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Compile the next machine-readable host action for a game-image run."""
+"""Compile the next machine-readable host action for a ai-3dgame-image-harness run."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +37,7 @@ def _reference_packets(
     asset: dict[str, Any],
     edit: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    refs = {ref["id"]: ref for ref in asset["references"]}
+    refs = {ref["id"]: ref for ref in asset.get("references", [])}
     packets: list[dict[str, Any]] = []
     for binding in edit.get("reference_bindings", []):
         ref = refs[binding["reference_id"]]
@@ -59,7 +60,7 @@ def _base_edit_target(
     if not target_id:
         return None
 
-    refs = {ref["id"]: ref for ref in asset["references"]}
+    refs = {ref["id"]: ref for ref in asset.get("references", [])}
     ref = refs[target_id]
     return {
         "reference_id": target_id,
@@ -219,6 +220,15 @@ def build_action_packet(
         "knowledge": _knowledge_packet(asset, edit),
         "budget": _budget_packet(run),
     }
+
+    if edit.get("region_contract"):
+        packet["region_contract"] = deepcopy(edit["region_contract"])
+    if edit.get("art_direction"):
+        packet["art_direction"] = deepcopy(edit["art_direction"])
+    if edit.get("reference_evidence"):
+        packet["reference_evidence"] = deepcopy(edit["reference_evidence"])
+    if edit.get("output",{}).get("expected_size") or "require_transparency" in edit.get("output",{}):
+        packet["technical_output"] = deepcopy(edit["output"])
 
     if state == "READY":
         mode = "generate" if edit["operation"] == "create" else "edit"

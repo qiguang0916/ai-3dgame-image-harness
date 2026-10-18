@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and finalize auditable game-image Master candidates."""
+"""Create and finalize auditable ai-3dgame-image-harness Master candidates."""
 
 from __future__ import annotations
 
@@ -194,15 +194,20 @@ def create_candidate(
     source_run_path: Path,
     reference_id: str,
     revision: int,
-    supersedes: str,
+    supersedes: str | None,
     output_path: Path,
 ) -> dict[str, Any]:
-    if not reference_id.strip() or not supersedes.strip():
-        raise ValidationError("reference_id and supersedes must be non-empty")
-    if reference_id == supersedes:
-        raise ValidationError("a Master revision cannot supersede itself")
+    if not reference_id.strip():
+        raise ValidationError("reference_id must be non-empty")
     if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
         raise ValidationError("revision must be a positive integer")
+    if revision == 1:
+        if supersedes is not None:
+            raise ValidationError("first Master cannot supersede another")
+    elif not isinstance(supersedes, str) or not supersedes.strip():
+        raise ValidationError("successor Master requires supersedes")
+    if reference_id == supersedes:
+        raise ValidationError("a Master revision cannot supersede itself")
 
     image_path = image_path.resolve()
     image_format, width, height = _image_dimensions(image_path)
@@ -222,6 +227,8 @@ def create_candidate(
         raise ValidationError("candidate image does not match source run result path")
     if run.get("auditable") is not True:
         raise ValidationError("Master candidate source run must be auditable")
+    if revision == 1 and not (run.get("bootstrap_asset") is True and run.get("execution_mode") == "generate"):
+        raise ValidationError("first Master must come from an auditable bootstrap create run")
     receipt = run.get("current_receipt")
     if not isinstance(receipt, dict):
         raise ValidationError("auditable candidate source run has no receipt")
@@ -278,6 +285,10 @@ def _validate_candidate_record(record: dict[str, Any], path: Path) -> None:
     for key in ("revision", "supersedes", "source_run_id", "source_run_path"):
         if key not in lineage:
             raise ValidationError(f"{path}: missing lineage field '{key}'")
+    if lineage["revision"] == 1 and lineage["supersedes"] is not None:
+        raise ValidationError(f"{path}: first Master has invalid predecessor")
+    if lineage["revision"] > 1 and not lineage["supersedes"]:
+        raise ValidationError(f"{path}: subsequent Master requires predecessor")
 
 
 def finalize_candidate(
@@ -433,6 +444,121 @@ def finalize_candidate(
     return decision
 
 
+def register_first_master(
+    *,
+    bootstrap_asset_path: Path,
+    decision_path: Path,
+    output_path: Path,
+    roles: list[str],
+) -> dict[str, Any]:
+    """Create a new active TOML manifest after first-Master QA; never mutate input."""
+    import re
+    from validate_project import validate_asset_manifest
+    if not roles or any(not isinstance(x, str) or not x.strip() for x in roles) or len(set(roles)) != len(roles):
+        raise ValidationError("first Master registration requires unique reference roles")
+    asset_doc = load_document(bootstrap_asset_path)
+    validate_document(asset_doc.data, asset_doc.path)
+    if asset_doc.data.get("status") != "bootstrap":
+        raise ValidationError("only a bootstrap manifest may register the first Master")
+    decision = _read_json(decision_path)
+    if decision.get("state") != "approved" or decision.get("asset_id") != asset_doc.data["asset_id"]:
+        raise ValidationError("approved decision asset_id does not match bootstrap manifest")
+    if decision.get("lineage", {}).get("revision") != 1 or decision.get("lineage", {}).get("supersedes") is not None:
+        raise ValidationError("first Master decision must be revision 1 without predecessor")
+    metadata = decision.get("lineage", {})
+    source_run_path = Path(str(metadata.get("source_run_path", "")))
+    qa_path = Path(str(metadata.get("source_qa_path", "")))
+    if not source_run_path.is_file() or not qa_path.is_file():
+        raise ValidationError("first Master decision has no verifiable source run / QA files")
+    source_run = _read_json(source_run_path)
+    if not (
+        source_run.get("auditable") is True
+        and source_run.get("bootstrap_asset") is True
+        and source_run.get("execution_mode") == "generate"
+        and source_run.get("state") == "ACCEPTED"
+        and source_run.get("asset_id") == asset_doc.data["asset_id"]
+        and source_run.get("run_id") == metadata.get("source_run_id")
+    ):
+        raise ValidationError("first Master decision source run is not an accepted bootstrap creation")
+    qa_doc = load_document(qa_path)
+    validate_document(qa_doc.data, qa_doc.path)
+    qa = qa_doc.data
+    from validate_project import SHA256_PATTERN
+    expected_qa = source_run.get("last_qa")
+    if (
+        not isinstance(expected_qa, dict)
+        or qa.get("report_id") != metadata.get("source_qa_report_id")
+        or expected_qa.get("report_id") != qa.get("report_id")
+        or qa.get("status") not in PASSING_QA_STATUSES
+        or expected_qa.get("status") not in PASSING_QA_STATUSES
+    ):
+        raise ValidationError("first Master was not approved by the persisted source QA")
+    validate_qa_completeness(source_run.get("required_hard_gates", []), qa)
+    _validate_auditable_qa(source_run, qa)
+    master_binding = qa.get("master_candidate")
+    if not isinstance(master_binding, dict) or not (
+        master_binding.get("reference_id") == decision.get("reference_id")
+        and master_binding.get("content_sha256") == metadata.get("content_sha256")
+        and master_binding.get("source_run_id") == source_run.get("run_id")
+        and master_binding.get("actual_pixels_inspected") is True
+    ):
+        raise ValidationError("first Master candidate pixel QA attestation is missing or does not match")
+    candidate = Path(str(decision.get("candidate_path", ""))).resolve()
+    receipt = source_run.get("current_receipt",{})
+    current_result = Path(source_run.get("current_result_path", ""))
+    if not current_result.is_absolute():
+        current_result = Path(source_run["workspace_root"]) / current_result
+    if (
+        candidate != current_result.resolve()
+        or not candidate.is_file()
+        or _sha256(candidate) != metadata.get("content_sha256")
+        or receipt.get("result_sha256") != metadata.get("content_sha256")
+    ):
+        raise ValidationError("candidate/source-run/receipt bytes do not match first Master decision")
+
+    image = Path(decision["approved_path"]).resolve()
+    if not image.is_file() or _sha256(image) != metadata["content_sha256"]:
+        raise ValidationError("approved first Master digest mismatch or missing file")
+    if output_path.resolve() == bootstrap_asset_path.resolve() or output_path.exists():
+        raise ValidationError("registration must create a new manifest path")
+    if output_path.parent.resolve() != bootstrap_asset_path.parent.resolve():
+        raise ValidationError("new manifest must share bootstrap manifest directory for portable paths")
+    text = bootstrap_asset_path.read_text(encoding="utf8")
+    if not re.search(r'(?m)^status\s*=\s*"bootstrap"\s*$', text):
+        raise ValidationError("bootstrap manifest must declare status in root header")
+    text = re.sub(r'(?m)^status\s*=\s*"bootstrap"\s*$', 'status = "active"', text, count=1)
+    text = re.sub(r'(?m)^references\s*=\s*\[\s*\]\s*$', '', text, count=1)
+    header, sep, tail = text.partition("\n[")
+    if not sep:
+        raise ValidationError("bootstrap manifest must contain locks table")
+    if "primary_master" in header:
+        raise ValidationError("bootstrap cannot contain primary_master")
+    new_text = header.rstrip() + "\nprimary_master = " + json.dumps(decision["reference_id"]) + "\n" + sep + tail
+    relpath = os.path.relpath(image, output_path.parent.resolve())
+    if relpath.startswith("../"):
+        raise ValidationError("approved Master must stay inside the asset workspace")
+    metadata = decision["lineage"]
+    new_text += ("\n[[references]]\n"
+                 "id = " + json.dumps(decision["reference_id"]) + "\n"
+                 "path = " + json.dumps(relpath) + "\n"
+                 'state = "approved"\n'
+                 "roles = " + json.dumps(roles) + "\n"
+                 "revision = 1\n"
+                 "content_sha256 = " + json.dumps(metadata["content_sha256"]) + "\n"
+                 "source_run_id = " + json.dumps(metadata["source_run_id"]) + "\n"
+                 "source_qa_report_id = " + json.dumps(metadata["source_qa_report_id"]) + "\n")
+    import tomllib
+    parsed = tomllib.loads(new_text)
+    validate_asset_manifest(parsed, output_path)
+    try:
+        with output_path.open("x", encoding="utf8") as handle:
+            handle.write(new_text)
+    except FileExistsError as exc:
+        raise ValidationError("refusing to overwrite existing active manifest") from exc
+    return {"status": "active", "manifest_path": str(output_path),
+            "primary_master": decision["reference_id"], "approved_image": str(image)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -442,7 +568,7 @@ def main(argv: list[str] | None = None) -> int:
     candidate.add_argument("--source-run", required=True, type=Path)
     candidate.add_argument("--reference-id", required=True)
     candidate.add_argument("--revision", required=True, type=int)
-    candidate.add_argument("--supersedes", required=True)
+    candidate.add_argument("--supersedes", help="Required for revision > 1; omit for first Master")
     candidate.add_argument("--out", required=True, type=Path)
 
     finalize = subparsers.add_parser("finalize")
@@ -450,6 +576,12 @@ def main(argv: list[str] | None = None) -> int:
     finalize.add_argument("--qa", required=True, type=Path)
     finalize.add_argument("--out", required=True, type=Path)
     finalize.add_argument("--approved-image", type=Path)
+
+    register = subparsers.add_parser("register-first")
+    register.add_argument("--bootstrap-asset", type=Path, required=True)
+    register.add_argument("--decision", type=Path, required=True)
+    register.add_argument("--out", type=Path, required=True)
+    register.add_argument("--roles", nargs="+", required=True)
 
     args = parser.parse_args(argv)
     try:
@@ -461,6 +593,13 @@ def main(argv: list[str] | None = None) -> int:
                 revision=args.revision,
                 supersedes=args.supersedes,
                 output_path=args.out,
+            )
+        elif args.command == "register-first":
+            result = register_first_master(
+                bootstrap_asset_path=args.bootstrap_asset,
+                decision_path=args.decision,
+                output_path=args.out,
+                roles=args.roles,
             )
         else:
             result = finalize_candidate(
