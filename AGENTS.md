@@ -77,3 +77,25 @@ If adding a contract field, reason code, or state transition, update validator/s
   is external, and a SHA cannot prove ownership or aesthetic quality.
 - Never merge to main or claim fully automatic commercial-ready Steam art
   until real OpenAI Host ImageGen/Unity round trips are independently accepted.
+
+## Native game-harness release bridge
+
+- v0.9 `unity_release_bridge.py` imports only immutable, seven-category,
+  same-commit evidence from `ai-3dgame-test-harness`. It neither launches
+  Unity nor rewrites any user project.
+- A fake `Unity PASS` review is insufficient. Require original release
+  manifest SHA, artifact URIs with matching SHA-256, an actual Unity Player
+  screenshot and game build commit. Do not claim rights/Steam approval.
+
+## v0.9 additional evidence hardening
+
+- Never treat a test stub or forged model-origin statement as a native
+  OpenAI image generation. `production-audit` requires actual,
+  traceable Codex-native source PNG, receipt and event transcript hashes.
+- Unity `player-capture` obtains three game-authored frames; an OS-level
+  screenshot permission grant is not required. Use an empty output
+  directory and stop the Player after capture, without modifying Unity
+  source. A PASS in this utility proves screenshot collection only.
+- Full commercial release remains BLOCKED without independent, same-commit
+  game-test Harness verification across all categories, human source rights,
+  game-scale visual approval and applicable Steam disclosures.

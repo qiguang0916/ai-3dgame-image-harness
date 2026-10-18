@@ -79,7 +79,31 @@ def _unity_evidence(root: Path, data: Any, blockers: list[str],
     build_id = data.get("build_id")
     if not isinstance(build_id, str) or not build_id.strip():
         blockers.append("unity_integration build_id missing")
+    # For in-game assets, rely on the independent ai-3dgame-test-harness
+    # seven-category same-commit release gate, not a self-written Unity PASS.
+    # Proof remains read-only and all referenced evidence bytes are rehashed.
+    release_path = _file(
+        root, data.get("test_harness_release"), "ai-3dgame-test-harness release manifest",
+        blockers,
+    )
+    release_player_sha = None
+    if release_path is not None and isinstance(build_id, str):
+        try:
+            from unity_release_bridge import verify_test_harness_release
+            release_manifest = json.loads(release_path.read_text(encoding="utf-8"))
+            verdict = verify_test_harness_release(release_manifest, expected_commit=build_id)
+            if verdict["status"] != "PASS":
+                blockers.append("independent seven-category Unity release gate BLOCKED: " +
+                                "; ".join(verdict["failures"]))
+            else:
+                release_player_sha = verdict["player_capture"]["sha256"]
+        except (OSError, ValueError, KeyError) as exc:
+            blockers.append("independent Unity release manifest invalid or unreadable")
+
     screenshot = _file(root, data.get("player_capture"), "unity player screenshot", blockers)
+    if screenshot is not None and release_player_sha is not None:
+        if sha256_file(screenshot) != release_player_sha:
+            blockers.append("Unity Player screenshot is not the seven-category test-harness capture")
     if screenshot is not None:
         try:
             from PIL import Image
