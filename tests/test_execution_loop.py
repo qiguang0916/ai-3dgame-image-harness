@@ -11,6 +11,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import execution_loop  # noqa: E402
+import topology_contract  # noqa: E402
 import validate_project  # noqa: E402
 
 
@@ -28,7 +29,30 @@ class ExecutionLoopTests(unittest.TestCase):
         ).data
 
     def _qa(self, status: str, directives: list[str] | None = None) -> dict:
-        gate_status = "PASS" if status in {"PASS", "PASS_WITH_NOTES"} else "FAIL"
+        required = topology_contract.expected_hard_gates(
+            self.asset, self.edit
+        )
+        gates = [
+            {
+                "name": name,
+                "severity": "hard",
+                "status": "PASS",
+                "note": "",
+            }
+            for name in required
+        ]
+
+        if status == "REPAIR_MINOR":
+            target = "exact rivet centers"
+            next(item for item in gates if item["name"] == target)[
+                "status"
+            ] = "FAIL"
+        elif status == "REGENERATE_MAJOR":
+            target = "blade broad silhouette"
+            next(item for item in gates if item["name"] == target)[
+                "status"
+            ] = "FAIL"
+
         qa = {
             "document_type": "qa_report",
             "schema_version": 1,
@@ -38,20 +62,7 @@ class ExecutionLoopTests(unittest.TestCase):
             "status": status,
             "summary": status,
             "repair_directives": directives or [],
-            "gates": [
-                {
-                    "name": "asset_identity",
-                    "severity": "hard",
-                    "status": "PASS",
-                    "note": "",
-                },
-                {
-                    "name": "rivet_count_and_centers",
-                    "severity": "hard",
-                    "status": gate_status,
-                    "note": "",
-                },
-            ],
+            "gates": gates,
         }
         validate_project.validate_document(qa, Path("qa.toml"))
         return qa

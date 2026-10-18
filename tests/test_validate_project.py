@@ -17,7 +17,7 @@ class ValidateProjectTests(unittest.TestCase):
     def test_repository_examples_validate(self) -> None:
         paths = validator.iter_toml_paths([str(ROOT / "examples")])
         documents = validator.validate_paths(paths)
-        self.assertEqual(3, len(documents))
+        self.assertGreaterEqual(len(documents), 5)  # legacy KNIFE + v0.6 bootstrap example
 
     def test_duplicate_reference_is_rejected(self) -> None:
         data = {
@@ -81,6 +81,17 @@ class ValidateProjectTests(unittest.TestCase):
     def test_local_edit_requires_explicit_edit_target(self) -> None:
         data = self._edit(reference_id="M", roles=["identity"])
         del data["execution"]
+        with self.assertRaises(validator.ValidationError):
+            validator.validate_document(data, Path("edit.toml"))
+
+    def test_provisional_mode_requires_declared_fields(self) -> None:
+        data = self._edit(reference_id="M", roles=["identity"])
+        data["reference_sufficiency"] = {
+            "required_roles": ["identity", "geometry"],
+            "allow_provisional": True,
+            "provisional_fields": [],
+            "prohibited_assumptions": [],
+        }
         with self.assertRaises(validator.ValidationError):
             validator.validate_document(data, Path("edit.toml"))
 

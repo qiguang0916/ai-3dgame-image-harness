@@ -1,6 +1,6 @@
 # Backend Integration
 
-game-image is a control layer, not a model provider.
+ai-3dgame-image-harness is a control layer, not a model provider.
 
 ## Capability detection
 

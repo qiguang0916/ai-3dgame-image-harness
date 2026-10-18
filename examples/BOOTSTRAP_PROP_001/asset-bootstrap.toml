@@ -1,0 +1,40 @@
+document_type = "asset_manifest"
+schema_version = 1
+asset_id = "BOOTSTRAP_PROP_001"
+asset_type = "hero_prop"
+status = "bootstrap"
+
+[locks]
+hard = ["visible subject identity", "base + shade + support topology", "camera framing", "no extra parts"]
+soft = ["softbox lighting", "neutral studio background"]
+
+[qa]
+max_repair_passes = 1
+max_regeneration_passes = 1
+
+[topology]
+forbid_extra_components = true
+
+[[topology.components]]
+id = "base"
+required = true
+count = 1
+count_unit = "assembly"
+visual_definition = "a single visible lamp base assembly"
+excludes = ["cast shadow", "highlight"]
+
+[[topology.components]]
+id = "support_arm"
+required = true
+count = 1
+count_unit = "assembly"
+visual_definition = "one articulated arm assembly even if multiple segments are visible"
+excludes = ["pivot covers", "small mounting screws"]
+
+[[topology.components]]
+id = "shade"
+required = true
+count = 1
+count_unit = "visible_instance"
+visual_definition = "one visible shade on the arm"
+excludes = ["shade rim"]

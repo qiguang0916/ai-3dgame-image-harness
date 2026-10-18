@@ -1,0 +1,33 @@
+document_type = "edit_request"
+schema_version = 1
+request_id = "CREATE_FIRST_MASTER"
+asset_id = "BOOTSTRAP_PROP_001"
+operation = "create"
+target = "a single articulated studio desk lamp with base, arm and shade"
+change = "Create the first clean, readable hero prop concept on a neutral background. No branding."
+
+[reference_sufficiency]
+required_roles = []
+allow_provisional = false
+provisional_fields = []
+prohibited_assumptions = ["unseen internal mechanism", "hidden back of the lamp"]
+
+[art_direction]
+purpose = "hero_prop_reference"
+style_family = "realistic game hero prop / premium workshop"
+camera = "three-quarter eye-level camera"
+lighting = "soft photographic studio key light, gentle fill"
+palette = ["slate charcoal", "brushed steel", "warm neutral"]
+material_notes = ["metal obeys physically plausible roughness", "no glossy plastic look"]
+game_scale_read = "silhouette and three required component assemblies identifiable at 1080p"
+must_match = true
+
+[qa_contract]
+required_hard_gates = ["asset_identity", "image_clipping", "no_accidental_text"]
+
+[preserve]
+hard = []
+soft = []
+
+[output]
+purpose = "hero_prop_reference"

@@ -9,6 +9,18 @@ change = "Describe only the requested delta."
 [execution]
 edit_target_reference_id = "ASSEMBLED_MASTER"
 
+[reference_sufficiency]
+required_roles = ["identity", "geometry"]
+allow_provisional = false
+provisional_fields = []
+prohibited_assumptions = ["hidden or unreferenced structure"]
+
+[qa_contract]
+required_hard_gates = [
+  "asset_identity",
+  "requested_change"
+]
+
 [preserve]
 hard = [
   "overall silhouette",

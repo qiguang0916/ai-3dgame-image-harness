@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Validate game-image TOML manifests with Python standard library only."""
+"""Validate ai-3dgame-image-harness TOML manifests with Python standard library only."""
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -12,7 +13,13 @@ from typing import Any, Iterable
 
 
 ALLOWED_DOCUMENT_TYPES = {"asset_manifest", "edit_request", "qa_report"}
-ALLOWED_REFERENCE_STATES = {"approved", "draft", "rejected", "superseded"}
+ALLOWED_REFERENCE_STATES = {
+    "approved",
+    "candidate",
+    "draft",
+    "rejected",
+    "superseded",
+}
 ALLOWED_OPERATIONS = {
     "create",
     "local_edit",
@@ -35,7 +42,21 @@ ALLOWED_QA_STATUSES = {
     "BLOCKED",
 }
 ALLOWED_GATE_SEVERITIES = {"hard", "soft"}
-ALLOWED_GATE_STATUSES = {"PASS", "FAIL", "NOTE", "NOT_CHECKED"}
+ALLOWED_GATE_STATUSES = {
+    "PASS",
+    "FAIL",
+    "NOTE",
+    "NOT_CHECKED",
+    "NOT_VERIFIABLE",
+}
+MASTER_LINEAGE_FIELDS = {
+    "revision",
+    "supersedes",
+    "content_sha256",
+    "source_run_id",
+    "source_qa_report_id",
+}
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -68,7 +89,10 @@ def ensure_string_list(value: Any, where: str, allow_empty: bool = False) -> lis
 def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
     where = str(path)
     require(data, "asset_id", where)
-    primary_master = require(data, "primary_master", where)
+    bootstrap = data.get("status") == "bootstrap"
+    primary_master = None if bootstrap else require(data, "primary_master", where)
+    if bootstrap and data.get("primary_master") is not None:
+        raise ValidationError(f"{where}: bootstrap assets cannot declare primary_master")
 
     locks = require(data, "locks", where)
     if not isinstance(locks, dict):
@@ -80,7 +104,9 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
         allow_empty=True,
     )
 
-    references = require(data, "references", where)
+    references = data.get("references", []) if bootstrap else require(data, "references", where)
+    if bootstrap and references:
+        raise ValidationError(f"{where}: bootstrap must have no production references")
     if not isinstance(references, list):
         raise ValidationError(f"{where}: references must be an array of tables")
 
@@ -106,14 +132,99 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
         if len(set(roles)) != len(roles):
             raise ValidationError(f"{rwhere}: duplicate reference roles")
 
-    if approved == 0:
-        raise ValidationError(f"{where}: at least one approved reference is required")
-    if primary_master not in ids:
-        raise ValidationError(
-            f"{where}: primary_master '{primary_master}' does not match a reference id"
+        lineage_fields = MASTER_LINEAGE_FIELDS.intersection(ref)
+        base_lineage = MASTER_LINEAGE_FIELDS - {"supersedes"}
+        required_lineage = (
+            base_lineage if ref.get("revision") == 1
+            else MASTER_LINEAGE_FIELDS
         )
-    if reference_by_id[primary_master].get("state") != "approved":
-        raise ValidationError(f"{where}: primary_master must be approved")
+        if lineage_fields and not required_lineage.issubset(lineage_fields):
+            missing = ", ".join(sorted(required_lineage - lineage_fields))
+            raise ValidationError(
+                f"{rwhere}: enhanced master lineage is missing: {missing}"
+            )
+        if lineage_fields:
+            if ref.get("revision") == 1 and "supersedes" in ref:
+                raise ValidationError(f"{rwhere}: first Master cannot supersede another")
+            revision = ref["revision"]
+            if (
+                isinstance(revision, bool)
+                or not isinstance(revision, int)
+                or revision < 1
+            ):
+                raise ValidationError(
+                    f"{rwhere}: revision must be a positive integer"
+                )
+            for key in ("source_run_id", "source_qa_report_id"):
+                require(ref, key, rwhere)
+            if ref["revision"] > 1:
+                require(ref, "supersedes", rwhere)
+            if ref.get("supersedes") == ref_id:
+                raise ValidationError(f"{rwhere}: supersedes cannot reference itself")
+            if not isinstance(ref["content_sha256"], str) or not SHA256_PATTERN.fullmatch(
+                ref["content_sha256"]
+            ):
+                raise ValidationError(
+                    f"{rwhere}: content_sha256 must be 64 lowercase hex characters"
+                )
+
+    if not bootstrap:
+        if approved == 0:
+            raise ValidationError(f"{where}: at least one approved reference is required")
+        if primary_master not in ids:
+            raise ValidationError(
+                f"{where}: primary_master '{primary_master}' does not match a reference id"
+            )
+        if reference_by_id[primary_master].get("state") != "approved":
+            raise ValidationError(f"{where}: primary_master must be approved")
+
+    successor_by_predecessor: dict[str, str] = {}
+    lineage_edges: dict[str, str] = {}
+    for ref_id, ref in reference_by_id.items():
+        if not MASTER_LINEAGE_FIELDS.intersection(ref):
+            continue
+        supersedes = ref.get("supersedes")
+        if supersedes is None:
+            continue
+        if supersedes in successor_by_predecessor:
+            raise ValidationError(
+                f"{where}: reference '{supersedes}' has multiple successors: "
+                f"'{successor_by_predecessor[supersedes]}' and '{ref_id}'"
+            )
+        successor_by_predecessor[supersedes] = ref_id
+        lineage_edges[ref_id] = supersedes
+        predecessor = reference_by_id.get(supersedes)
+        if predecessor is None:
+            raise ValidationError(
+                f"{where}: reference '{ref_id}' supersedes unknown reference "
+                f"'{supersedes}'"
+            )
+        if ref["state"] == "approved" and predecessor["state"] != "superseded":
+            raise ValidationError(
+                f"{where}: approved reference '{ref_id}' requires its predecessor "
+                f"'{supersedes}' to be superseded"
+            )
+        predecessor_revision = predecessor.get("revision")
+        if (
+            isinstance(predecessor_revision, int)
+            and not isinstance(predecessor_revision, bool)
+            and predecessor_revision >= ref["revision"]
+        ):
+            raise ValidationError(
+                f"{where}: reference '{ref_id}' revision must be newer than "
+                f"'{supersedes}'"
+            )
+
+    for start in lineage_edges:
+        seen: set[str] = set()
+        current = start
+        while current in lineage_edges:
+            if current in seen:
+                raise ValidationError(
+                    f"{where}: reference lineage contains a cycle at '{current}'"
+                )
+            seen.add(current)
+            current = lineage_edges[current]
 
     qa = data.get("qa", {})
     if qa:
@@ -135,6 +246,13 @@ def validate_asset_manifest(data: dict[str, Any], path: Path) -> None:
                 f"{where}: qa.max_regeneration_passes must be an integer 0..3"
             )
 
+    from topology_contract import validate_topology_schema
+
+    try:
+        validate_topology_schema(data, where)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+
 
 def validate_edit_request(data: dict[str, Any], path: Path) -> None:
     where = str(path)
@@ -150,8 +268,6 @@ def validate_edit_request(data: dict[str, Any], path: Path) -> None:
     if execution and not isinstance(execution, dict):
         raise ValidationError(f"{where}: execution must be a table")
     if operation in OPERATIONS_REQUIRING_BASE_EDIT_TARGET:
-        if not isinstance(execution, dict):
-            raise ValidationError(f"{where}: execution must be a table")
         require(
             execution,
             "edit_target_reference_id",
@@ -175,6 +291,56 @@ def validate_edit_request(data: dict[str, Any], path: Path) -> None:
         raise ValidationError(
             f"{where}: local_edit requires at least one hard preserve rule"
         )
+
+    sufficiency = data.get("reference_sufficiency", {})
+    if sufficiency:
+        if not isinstance(sufficiency, dict):
+            raise ValidationError(
+                f"{where}: reference_sufficiency must be a table"
+            )
+        ensure_string_list(
+            sufficiency.get("required_roles", []),
+            f"{where}: reference_sufficiency.required_roles",
+            allow_empty=True,
+        )
+        provisional_fields = ensure_string_list(
+            sufficiency.get("provisional_fields", []),
+            f"{where}: reference_sufficiency.provisional_fields",
+            allow_empty=True,
+        )
+        ensure_string_list(
+            sufficiency.get("prohibited_assumptions", []),
+            f"{where}: reference_sufficiency.prohibited_assumptions",
+            allow_empty=True,
+        )
+        allow_provisional = sufficiency.get("allow_provisional", False)
+        if not isinstance(allow_provisional, bool):
+            raise ValidationError(
+                f"{where}: reference_sufficiency.allow_provisional must be boolean"
+            )
+        if allow_provisional and not provisional_fields:
+            raise ValidationError(
+                f"{where}: provisional mode requires provisional_fields"
+            )
+
+    qa_contract = data.get("qa_contract", {})
+    if qa_contract:
+        if not isinstance(qa_contract, dict):
+            raise ValidationError(f"{where}: qa_contract must be a table")
+        required_gates = ensure_string_list(
+            qa_contract.get("required_hard_gates", []),
+            f"{where}: qa_contract.required_hard_gates",
+            allow_empty=True,
+        )
+        if len(set(required_gates)) != len(required_gates):
+            raise ValidationError(
+                f"{where}: qa_contract.required_hard_gates contains duplicates"
+            )
+
+    from region_quality import validate_region_contract
+    from game_art_contract import validate_art_and_output
+    validate_region_contract(data, where)
+    validate_art_and_output(data, where)
 
     bindings = data.get("reference_bindings", [])
     if operation != "create" and not bindings:
@@ -254,7 +420,7 @@ def validate_qa_report(data: dict[str, Any], path: Path) -> None:
 
     if status in {"REPAIR_MINOR", "REGENERATE_MAJOR"} and non_pass_gate_count == 0:
         raise ValidationError(
-            f"{where}: {status} requires at least one failed/not-checked gate"
+            f"{where}: {status} requires at least one failed/unverifiable gate"
         )
 
     directives = ensure_string_list(
@@ -266,6 +432,24 @@ def validate_qa_report(data: dict[str, Any], path: Path) -> None:
         raise ValidationError(
             f"{where}: REPAIR_MINOR requires at least one repair directive"
         )
+
+    master_candidate = data.get("master_candidate")
+    if master_candidate is not None:
+        mwhere = f"{where}: master_candidate"
+        if not isinstance(master_candidate, dict):
+            raise ValidationError(f"{mwhere}: must be a table")
+        for key in ("reference_id", "content_sha256", "source_run_id"):
+            require(master_candidate, key, mwhere)
+        digest = master_candidate["content_sha256"]
+        if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+            raise ValidationError(
+                f"{mwhere}: content_sha256 must be 64 lowercase hex characters"
+            )
+        inspected = master_candidate.get("actual_pixels_inspected")
+        if not isinstance(inspected, bool):
+            raise ValidationError(
+                f"{mwhere}: actual_pixels_inspected must be boolean"
+            )
 
 
 def validate_document(data: dict[str, Any], path: Path) -> None:
@@ -297,6 +481,7 @@ def load_document(path: Path) -> LoadedDocument:
 def cross_validate(documents: list[LoadedDocument]) -> None:
     assets: dict[str, dict[str, Any]] = {}
     edits: dict[str, dict[str, Any]] = {}
+    qa_reports: list[LoadedDocument] = []
 
     for doc in documents:
         dtype = doc.data["document_type"]
@@ -314,70 +499,110 @@ def cross_validate(documents: list[LoadedDocument]) -> None:
                     f"duplicate edit request '{request_id}'"
                 )
             edits[request_id] = doc.data
+        elif dtype == "qa_report":
+            qa_reports.append(doc)
 
     for doc in documents:
         data = doc.data
-        dtype = data["document_type"]
+        if data["document_type"] != "edit_request":
+            continue
 
-        if dtype == "edit_request":
-            asset = assets.get(data["asset_id"])
-            if asset is None:
-                continue
+        asset = assets.get(data["asset_id"])
+        if asset is None:
+            continue
 
-            reference_by_id = {
-                ref["id"]: ref for ref in asset["references"]
-            }
-            bound_ids: set[str] = set()
+        if asset.get("status") == "bootstrap":
+            if data["operation"] != "create":
+                raise ValidationError(f"{doc.path}: bootstrap assets only allow create")
+            if data.get("reference_bindings") or data.get("execution", {}).get("edit_target_reference_id"):
+                raise ValidationError(f"{doc.path}: bootstrap cannot bind production inputs")
+        reference_by_id = {
+            ref["id"]: ref for ref in asset.get("references", [])
+        }
+        bound_ids: set[str] = set()
 
-            for binding in data.get("reference_bindings", []):
-                ref_id = binding["reference_id"]
-                bound_ids.add(ref_id)
-                ref = reference_by_id.get(ref_id)
-                if ref is None:
-                    raise ValidationError(
-                        f"{doc.path}: reference_binding '{ref_id}' is not in asset "
-                        f"'{data['asset_id']}'"
-                    )
-                if ref.get("state") != "approved":
-                    raise ValidationError(
-                        f"{doc.path}: reference_binding '{ref_id}' is not approved"
-                    )
-
-                declared_roles = set(ref.get("roles", []))
-                requested_roles = set(binding.get("roles", []))
-                undeclared = requested_roles - declared_roles
-                if undeclared:
-                    joined = ", ".join(sorted(undeclared))
-                    raise ValidationError(
-                        f"{doc.path}: reference_binding '{ref_id}' requests "
-                        f"undeclared role(s): {joined}"
-                    )
-
-            operation = data["operation"]
-            if operation in OPERATIONS_REQUIRING_BASE_EDIT_TARGET:
-                target_id = data["execution"]["edit_target_reference_id"]
-                target_ref = reference_by_id.get(target_id)
-                if target_ref is None:
-                    raise ValidationError(
-                        f"{doc.path}: edit target '{target_id}' is not in asset "
-                        f"'{data['asset_id']}'"
-                    )
-                if target_ref.get("state") != "approved":
-                    raise ValidationError(
-                        f"{doc.path}: edit target '{target_id}' is not approved"
-                    )
-                if target_id not in bound_ids:
-                    raise ValidationError(
-                        f"{doc.path}: edit target '{target_id}' must also appear "
-                        "in reference_bindings"
-                    )
-
-        elif dtype == "qa_report":
-            request = edits.get(data["request_id"])
-            if request is not None and request["asset_id"] != data["asset_id"]:
+        for binding in data.get("reference_bindings", []):
+            ref_id = binding["reference_id"]
+            bound_ids.add(ref_id)
+            ref = reference_by_id.get(ref_id)
+            if ref is None:
                 raise ValidationError(
-                    f"{doc.path}: QA asset_id does not match linked edit request"
+                    f"{doc.path}: reference_binding '{ref_id}' is not in asset "
+                    f"'{data['asset_id']}'"
                 )
+            if ref.get("state") != "approved":
+                raise ValidationError(
+                    f"{doc.path}: reference_binding '{ref_id}' is not approved"
+                )
+
+            declared_roles = set(ref.get("roles", []))
+            requested_roles = set(binding.get("roles", []))
+            undeclared = requested_roles - declared_roles
+            if undeclared:
+                joined = ", ".join(sorted(undeclared))
+                raise ValidationError(
+                    f"{doc.path}: reference_binding '{ref_id}' requests "
+                    f"undeclared role(s): {joined}"
+                )
+
+        from game_art_contract import reference_visual_coverage
+        by_binding = {
+            bind["reference_id"]: set(bind["roles"])
+            for bind in data.get("reference_bindings", [])
+        }
+        for observation in data.get("reference_evidence", {}).get("observations", []):
+            ref_id = observation["reference_id"]
+            if ref_id not in by_binding:
+                raise ValidationError(
+                    f"{doc.path}: reference evidence '{ref_id}' is not a selected input"
+                )
+            if set(observation["roles"]) - by_binding[ref_id]:
+                raise ValidationError(
+                    f"{doc.path}: reference evidence '{ref_id}' claims roles absent from selected binding"
+                )
+
+        operation = data["operation"]
+        if operation in OPERATIONS_REQUIRING_BASE_EDIT_TARGET:
+            target_id = data["execution"]["edit_target_reference_id"]
+            target_ref = reference_by_id.get(target_id)
+            if target_ref is None:
+                raise ValidationError(
+                    f"{doc.path}: edit target '{target_id}' is not in asset "
+                    f"'{data['asset_id']}'"
+                )
+            if target_ref.get("state") != "approved":
+                raise ValidationError(
+                    f"{doc.path}: edit target '{target_id}' is not approved"
+                )
+            if target_id not in bound_ids:
+                raise ValidationError(
+                    f"{doc.path}: edit target '{target_id}' must also appear "
+                    "in reference_bindings"
+                )
+
+    from topology_contract import (
+        expected_hard_gates,
+        validate_qa_completeness,
+    )
+
+    for qa_doc in qa_reports:
+        qa = qa_doc.data
+        request = edits.get(qa["request_id"])
+        if request is None:
+            continue
+        if request["asset_id"] != qa["asset_id"]:
+            raise ValidationError(
+                f"{qa_doc.path}: QA asset_id does not match linked edit request"
+            )
+        asset = assets.get(qa["asset_id"])
+        if asset is None:
+            continue
+        required = expected_hard_gates(asset, request)
+        if required:
+            try:
+                validate_qa_completeness(required, qa)
+            except ValueError as exc:
+                raise ValidationError(str(exc)) from exc
 
 
 def iter_toml_paths(inputs: Iterable[str]) -> list[Path]:

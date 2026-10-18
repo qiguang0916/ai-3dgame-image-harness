@@ -1,7 +1,6 @@
 ---
-name: game-image-asset-reference
+name: ai-3dgame-image-harness-asset-reference
 description: Manage approved game-asset masters and a reference atlas. Use before generation or editing when multiple images define identity, geometry, material, camera, or component interfaces.
-version: 0.1.0
 ---
 
 # Asset Reference
@@ -86,5 +85,9 @@ When a new result is approved:
 - mark replaced references superseded;
 - keep rejected outputs out of future generation;
 - update the manifest before the next dependent task.
+
+Use `references/master-lifecycle.md` and `scripts/master_lifecycle.py` for a
+candidate. Approval copies it to a new immutable path and emits a lineage
+decision; it never silently overwrites or auto-promotes the candidate.
 
 Use templates/asset-manifest.toml as the persistent format.

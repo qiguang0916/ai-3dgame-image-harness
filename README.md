@@ -1,288 +1,105 @@
-# game-image
+# AI 3D Game Image Harness
 
-**Game Image Director / Execution Harness**：给 ChatGPT / Codex 的游戏图片生产控制层。
+**Current development branch: v0.6 — Professional Game Asset Production.**
 
-它不在本地跑图片模型，也不要求 ComfyUI。它把图片需求变成一个有 Master、有明确 edit target、有 Reference Role、有 QA、有状态、有返工上限的生产闭环。
+This is a Codex/OpenAI **game image production Skill and auditable QA harness**, **not** an image generation model. The official built-in OpenAI `$imagegen` is the sole default image generation/editing backend. No API key, paid fallback, local diffusion model, or GPU inference runtime is introduced by this project.
 
-## v0.3 核心变化：Host Action Protocol
+Repository: https://github.com/qiguang0916/ai-3dgame-image-harness
 
-v0.2 已经有状态机，但 Agent 仍需要自己解释“下一步具体做什么”。
+## 能解决什么
 
-v0.3 增加 **Host Action Packet**：
+- **从零生成首张 Master**：`bootstrap → imagegen_generate → Receipt → Visual QA → Candidate → Approved First Master → Active Manifest`。
+- **已有素材精细修改**：选择当前批准参考图，按 Delta Brief 修改局部，保护指定区域。
+- **游戏美术规范**：按视觉风格、材质、配色、光照、相机和游戏实际展示尺寸构造专业提示词；借鉴 Apache-2.0 的 Create Game Assets 方法，不强制安装第三方 Skill。
+- **证据驱动 QA**：图像实际像素变化、组件/拓扑视觉检查、PNG 大小/透明通道、Master/Receipt SHA-256 绑定。
+- **修复与重大重生成**：局部缺陷走 REPAIR_MINOR；结构问题走 REGENERATE_MAJOR；不可验证的情况 BLOCKED，预算有限制。
 
-~~~text
-Run State
-   ↓
-next_action.py
-   ↓
-JSON Host Action Packet
-   ↓
-Codex / Agent
-   ├─ imagegen_generate
-   ├─ imagegen_edit
-   ├─ visual_qa
-   ├─ deliver
-   └─ report_blocked
-~~~
+## 一条命令入口
 
-Packet 会明确提供：
+在本仓库下：
 
-- 这一步是生成还是编辑；
-- **真正的 edit target 是哪张图**；
-- 哪些图只是辅助 reference；
-- 每张 reference 的 role；
-- 最终 authoritative prompt；
-- QA hard / soft gates；
-- 下一步如何更新状态。
+```bash
+./bin/ai-3dgame-image-harness doctor
+./bin/ai-3dgame-image-harness version
+./bin/ai-3dgame-image-harness validate
+./bin/ai-3dgame-image-harness master --help
+./bin/ai-3dgame-image-harness region-qa --help
+```
 
-## 完整工作流
+`doctor` 的 `ready` 仅代表确定性 QA 依赖齐备；**不能证明当前 Codex Host 有 ImageGen**。
 
-~~~text
-用户要求
-  ↓
-Game Image Director
-  ↓
-Master / Reference Atlas
-  ↓
-明确 Edit Target
-  ↓
-Reference Role + Priority
-  ↓
-Geometry / Material / Camera Locks
-  ↓
-Execution Run
-  ↓
-Host Action Packet
-  ↓
-官方 $imagegen / 宿主内置图片能力
-  ↓
-实际生成/编辑结果
-  ↓
-Host Action Packet: visual_qa
-  ↓
-Visual QA
-  ├─ PASS → ACCEPTED → deliver
-  ├─ REPAIR_MINOR → Failed Result 做 edit target → 再编辑
-  ├─ REGENERATE_MAJOR → 回 Approved Master → 重做
-  └─ BLOCKED → 停止并说明限制
-~~~
+### 从零创建第一个 Master
 
-## 为什么不需要 ComfyUI
+从 `examples/BOOTSTRAP_PROP_001/asset-bootstrap.toml` 和 `create.toml` 开始：
 
-`game-image` 是 backend-neutral 的监督层：
+```bash
+./bin/ai-3dgame-image-harness init \
+  --asset <bootstrap-asset.toml> --edit <create.toml> \
+  --output <runs/create.json> --workspace-root <workspace>
+./bin/ai-3dgame-image-harness next \
+  --asset <bootstrap-asset.toml> --edit <create.toml> --run <runs/create.json> \
+  > <packets/01.json>
+```
 
-- 不要求 CUDA
-- 不要求 Stable Diffusion / FLUX 权重
-- 不要求本地 GPU
-- 不内置 OpenAI API 客户端
-- OpenAI/Codex 环境优先委托官方 `$imagegen` built-in image tool
+由 **Codex 宿主内置 `$imagegen`** 执行 Packet 的 `imagegen_generate`，保存真实 PNG。再按 `references/execution-receipt.md` 记录并实际检查像素，写完整 QA，经 `qa` 转为 ACCEPTED，创建 Candidate：
 
-底层图片模型升级，不需要重写 Master / Lock / QA / Loop。
+```bash
+./bin/ai-3dgame-image-harness master candidate \
+  --image <outputs/master-draft.png> --source-run <runs/create.json> \
+  --reference-id MASTER_R1 --revision 1 --out <candidate.json>
+./bin/ai-3dgame-image-harness master finalize \
+  --candidate <candidate.json> --qa <qa/master-qa.toml> \
+  --approved-image <references/master-r1.png> --out <approved.json>
+./bin/ai-3dgame-image-harness master register-first \
+  --bootstrap-asset <bootstrap-asset.toml> --decision <approved.json> \
+  --roles identity geometry material camera style \
+  --out <asset-active.toml>
+```
 
-## 当前能力
+**严禁跳过真实生成、Host 视觉审核和批准，不能把 Candidate 当成 Approved Reference。** 完整说明：`references/first-master.md`。
 
-- Game Image Director
-- Asset Reference / Reference Atlas
-- Reference Role / Priority
-- **Explicit Edit Target**
-- Geometry Lock
-- Material Lock
-- Camera Lock
-- Delta Edit
-- Edit vs Regenerate
-- Visual QA
-- Hard / Soft Acceptance Gates
-- Brief Compiler
-- Repair Brief Compiler
-- Execution State Machine
-- **Host Action Packet Compiler**
-- Repair / Regeneration 次数上限
-- KNIFE_001 示例
-- **完整 E2E dry-run**
-- GitHub Actions 自动验证
+### 精确局部编辑
 
-## 目录
+在 `edit.toml` 内增加可选 `[region_contract]` 与 `[[region_contract.targets]]` / `[[region_contract.protected]]`，使用 0..1 坐标描述允许修改和受保护区域。此协议 **不声称宿主支持原生 Mask 编辑**，其主要价值是生成前的空间约束和生成后的客观检测。
 
-~~~text
-SKILL.md
-skills/
-  asset-reference/
-  delta-edit/
-  visual-qa/
-  execution-loop/
-rules/
-references/
-  openai-imagegen-delegation.md
-  host-action-protocol.md
-templates/
-scripts/
-  validate_project.py
-  compile_brief.py
-  compile_repair.py
-  execution_loop.py
-  next_action.py
-  demo_e2e.py
-examples/
-  KNIFE_001/
-tests/
-~~~
+```bash
+./bin/ai-3dgame-image-harness region-qa \
+  --edit <edit.toml> --reference <approved-master.png> \
+  --result <edited.png> --output <region-report.json> \
+  --diff-image <diff-heatmap.png>
+```
 
-## 使用
+`enforce` 模式下，`apply-qa` 会**重新读取、计算像素**，核验 `visual.region_preservation`，而不是相信手写的 PASS。参见 `references/region-quality.md`。
 
-### 1. 初始化 run
+### 技术导出标准
 
-~~~bash
-python3 scripts/execution_loop.py init \
-  --asset examples/KNIFE_001/asset.toml \
-  --edit examples/KNIFE_001/edits/rivets-brushed-silver.toml \
-  --output .game-image/runs/KNIFE_001_RIVETS.json
-~~~
+可在 `[output]` 设置可选 `expected_size = "1536x1024"`、`require_transparency = true/false`；`image.technical_output` 成为必需 Hard Gate：
 
-### 2. 获取下一步
+```bash
+./bin/ai-3dgame-image-harness asset-report \
+  --edit <edit.toml> --image <edited.png> --out <technical-report.json>
+```
 
-~~~bash
-python3 scripts/next_action.py \
-  --asset examples/KNIFE_001/asset.toml \
-  --edit examples/KNIFE_001/edits/rivets-brushed-silver.toml \
-  --run .game-image/runs/KNIFE_001_RIVETS.json
-~~~
+详情：`references/technical-output.md`。
 
-初始 Packet 会类似：
+## 开发验证
 
-~~~json
-{
-  "action": "imagegen_edit",
-  "edit_target": {
-    "reference_id": "ASSEMBLED_MASTER",
-    "path": "references/KNIFE_001_ASSEMBLED_MASTER.png"
-  },
-  "references": [
-    {
-      "reference_id": "ASSEMBLED_MASTER",
-      "roles": ["identity", "material", "color", "camera"]
-    },
-    {
-      "reference_id": "HANDLE_L_OUTER_MASTER",
-      "roles": ["geometry", "silhouette", "part_layout", "material"]
-    }
-  ]
-}
-~~~
-
-这意味着：
-
-**ASSEMBLED_MASTER 是被编辑的原图；HANDLE_L_OUTER_MASTER 只是辅助参考。**
-
-### 3. Host 执行 Image
-
-Codex / Agent 根据 Packet 调用 `$imagegen`。
-
-结果保存后：
-
-~~~bash
-python3 scripts/execution_loop.py mark-generated \
-  --run .game-image/runs/KNIFE_001_RIVETS.json \
-  --result assets/generated/KNIFE_001_rivets_v1.png
-~~~
-
-### 4. 再次获取下一步
-
-现在 Packet 会变为：
-
-~~~text
-action = visual_qa
-~~~
-
-里面已经包含：
-
-- result_path
-- comparison references
-- requested change
-- hard gates
-- soft gates
-
-Agent 实际看图，写 QA TOML。
-
-### 5. Apply QA
-
-~~~bash
-python3 scripts/execution_loop.py apply-qa \
-  --run .game-image/runs/KNIFE_001_RIVETS.json \
-  --qa path/to/qa.toml
-~~~
-
-然后继续调用 `next_action.py`。
-
-不需要 Agent 自己重新规划整个流程。
-
-## Repair
-
-如果 QA = `REPAIR_MINOR`：
-
-~~~text
-edit_target = 上一轮失败的生成结果
-prompt = Correction Delta
-~~~
-
-只修失败 gate。
-
-## Regenerate
-
-如果 QA = `REGENERATE_MAJOR`：
-
-~~~text
-edit_target = 原 Approved Master
-restart_policy = approved_source_not_failed_result
-~~~
-
-防止在坏图上反复叠错。
-
-## 循环上限
-
-默认：
-
-~~~text
-max_repair_passes = 2
-max_regeneration_passes = 1
-~~~
-
-超限进入 `BLOCKED`。
-
-## E2E Dry Run
-
-不调用图片模型也能验证完整 Harness 路由：
-
-~~~bash
-python3 scripts/demo_e2e.py
-~~~
-
-预期：
-
-~~~text
-1 READY -> imagegen_edit
-2 QA_PENDING -> visual_qa
-3 REPAIR_READY -> imagegen_edit(failed result)
-4 QA_PENDING -> visual_qa
-5 ACCEPTED -> deliver
-E2E DRY RUN PASS
-~~~
-
-## 自动验证
-
-~~~bash
+```bash
+python3 -m pip install -r requirements-quality.txt  # macOS 已安装时无需重复执行
 python3 scripts/validate_project.py
 python3 -m unittest discover -s tests -v
 python3 scripts/demo_e2e.py
-~~~
+```
 
-GitHub Actions 在 push / PR 自动运行三项。
+真实 OpenAI ImageGen 只能由具备该能力的宿主执行。单元测试、模拟图片、Host attestation、静态校验都**不能单独证明真实模型输出质量**。
 
-## 当前定位
+## 向后兼容与目录
 
-v0.3 已经把“规则 + 状态机”进一步变成了**Codex 可消费的机器协议**。
+- v0.5 manifests 不含新字段时，保留原有 Master/Receipt/Packet/QA 行为；
+- 旧运行目录 `.game-image/` 继续忽略，原有 E2E 证据不移动或删除；
+- 新本地运行结果建议使用 `.ai-3dgame-image-harness/`；
+- `$HOME/game-image` 可以作为旧版只读基线，当前项目在 `$HOME/ai-3dgame-image-harness`。
 
-下一阶段是真实 Host E2E：
+## 真实验证边界
 
-> 在安装了 `game-image` 且能用 `$imagegen` 的 Codex/Agent 环境，放入真实 Master Reference 图片，运行一次真实图片编辑 → QA → Repair → PASS。
-
-完成后即可进入 v1.0 收口，以及和 AI 3D Game Harness 对接。
+离线 v0.6 回归可以验证全流程代码和区域 QA。新的真实 Host `$imagegen` E2E、重大结构再生成与复杂 `KNIFE_001` 参考资产仍须由当前 Mac Codex Host 分别执行；没有证据时不得宣称质量提升或 v1.0 READY。进度详情见 `docs/V06_ACCEPTANCE.md`。

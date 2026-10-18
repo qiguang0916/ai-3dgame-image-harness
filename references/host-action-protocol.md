@@ -1,6 +1,6 @@
 # Host Action Protocol
 
-The host action packet is the contract between deterministic game-image logic and the Agent/host that can actually call image tools.
+The Host Action Packet is the machine-readable contract between deterministic ai-3dgame-image-harness logic and the Agent/host that can call image tools.
 
 Generate it with:
 
@@ -11,99 +11,102 @@ python3 scripts/next_action.py \
   --run <run.json>
 ~~~
 
-## Why this exists
+A real run must have passed runtime preflight before an image action can exist. A blocked run returns only `report_blocked`.
 
-Without a host packet, an Agent has to re-infer every turn:
+## Packet versions
 
-- generate or edit?
-- which image is the actual edit target?
-- which images are supporting references?
-- what does each reference control?
-- what prompt should be sent?
-- should the next step be QA, repair, regeneration, or delivery?
+Legacy/dry in-memory flows may emit Packet v2. A real auditable run emits
+Packet v3 with `packet_id`, `iteration`, `workspace_root`, and
+`input_bindings`. Each input binding carries a portable workspace-relative
+path, resolved local path, SHA-256, and PNG metadata.
 
-The packet makes those decisions explicit and testable.
+When an image action is emitted, its `packet_id`, action, state, and iteration
+are persisted as the run's `issued_packet`. `mark-generated` accepts only that
+exact issued Packet; recomputing a digest for altered content is not enough.
 
-## Packet actions
+## Common fields
+
+Every packet carries:
+
+- `operation`
+- `requested_delta`
+- `hard_preserve`
+- `soft_preserve`
+- `required_hard_gates`
+- `topology.required_components`
+- `topology.structural_relationships`
+- `reference_sufficiency`
+- `knowledge.authoritative_facts`
+- `knowledge.provisional_fields`
+- `knowledge.prohibited_assumptions`
+- repair/regeneration `budget`
+- `expected_post_action_transition`
+- `fallback_policy = "none"`
+
+The host must not re-infer these structural facts from natural language.
+
+## Actions
 
 ### imagegen_generate
 
-Use the host's native image generation capability.
-
-Fields:
-
-- `references`: selected approved support references.
-- `prompt`: authoritative compiled brief.
-- `after_success = mark_generated`.
+Use the host-native generation capability with packet references and packet prompt.
 
 ### imagegen_edit
 
-Use image editing, not fresh text-to-image.
+Use the exact packet `edit_target`. Support references are separate inputs with declared roles.
 
-Fields:
+For a real v3 action, pass only files in `input_bindings`; do not reinterpret
+paths from the shell cwd. After execution, use the same packet to create the
+execution receipt.
 
-- `edit_target`: exact image to modify.
-- `references`: support references, each with declared roles.
-- `prompt`: authoritative delta or repair brief.
-- `after_success = mark_generated`.
+For initial edits the target comes from `execution.edit_target_reference_id`.
 
-The edit target and a support reference may point to the same file; their responsibilities are still different.
+For repair, the failed generated result becomes the edit target.
+
+For major regeneration, the approved base source becomes the edit target again.
 
 ### visual_qa
 
-The host must inspect real pixels.
+Inspect the actual `result_path` and approved comparison references.
 
-Fields:
+The packet includes required hard gates and allows required hard-gate statuses:
 
-- `result_path`;
-- `comparison_references`;
-- `requested_change`;
-- `hard_gates`;
-- `soft_gates`;
-- allowed QA statuses.
+- `PASS`
+- `FAIL`
+- `NOT_VERIFIABLE`
 
-The Agent writes a QA TOML and applies it through `execution_loop.py apply-qa`.
+Write a complete QA TOML, then apply it through `execution_loop.py apply-qa`.
+The QA report must bind the current receipt and result digest; an earlier
+iteration's report cannot be replayed.
 
 ### deliver
 
-The run is accepted.
-
-Deliver `result_path`.
+The accepted persisted result is terminal.
 
 ### report_blocked
 
-The run exhausted its bounded loop or hit an execution/inspection blocker.
+The blocker object contains the formal reason. No new image action is allowed.
 
-Do not silently continue regenerating.
+## Reference knowledge
 
-## Edit target semantics
+`reference_sufficiency` states whether minimum roles are covered.
 
-For initial local/structural/variant edits, the edit request contains:
+`authoritative_facts` may be enforced.
 
-~~~toml
-[execution]
-edit_target_reference_id = "ASSEMBLED_MASTER"
-~~~
+`provisional_fields` are explicitly unconfirmed.
 
-This is the image that must be modified.
+`prohibited_assumptions` must never be invented or promoted to Master truth.
 
-`reference_bindings` are support inputs and must not be mistaken for the edit target.
+See:
 
-For a repair pass, the edit target changes to the failed generated result. This is automatic in the host packet.
+- `references/reference-sufficiency.md`
+- `references/topology-contract.md`
+- `references/visual-qa-contract.md`
+- `references/host-failure-protocol.md`
+- `references/execution-receipt.md`
 
-For major regeneration, the host packet switches back to the approved base edit target. It must not keep editing the failed result.
+## OpenAI/Codex delegation
 
-## OpenAI/Codex host behavior
+When `$imagegen` is available, follow `references/openai-imagegen-delegation.md`.
 
-If `$imagegen` is available:
-
-1. read its official skill instructions;
-2. invoke the built-in image path;
-3. follow the host packet's action;
-4. use the packet's edit target and references;
-5. do not invent a second prompt;
-6. persist the selected result;
-7. mark-generated;
-8. request the next packet.
-
-The deterministic scripts do not call `image_gen` themselves.
+Use the built-in image path, obey this packet, persist the selected result, and advance state explicitly. Never auto-switch to API/CLI fallback.

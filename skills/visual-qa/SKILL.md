@@ -1,94 +1,57 @@
 ---
-name: game-image-visual-qa
-description: Visual acceptance gate for generated game-asset images. Compares the actual output with requested changes and approved masters, then returns PASS, repair, regenerate, or blocked.
-version: 0.1.0
+name: ai-3dgame-image-harness-visual-qa
+description: Use when accepting, repairing, regenerating, or blocking a generated game-asset image based on actual pixels, approved references, required hard gates, structural topology, and task-specific change requirements.
 ---
 
 # Game Asset Visual QA
 
-## Purpose
+## Core rule
 
-Judge production usability, not just beauty.
+Judge production usability from actual pixels. A visually attractive result is not acceptable if a required hard gate is missing, failed, or unverifiable.
 
-A beautiful result that violates a Master Reference is a failure.
+**Required reference:** read `references/visual-qa-contract.md`.
 
 ## Inputs
 
-Required:
+Inspect:
 
-- actual generated/edited image;
-- edit or generation brief;
-- approved references used for the task;
-- hard and soft locks.
+- generated/edited result;
+- selected approved references;
+- requested delta;
+- hard and soft preserve rules;
+- `required_hard_gates`;
+- topology/reference-sufficiency facts in the Host Action Packet.
 
-If the actual image cannot be inspected, return BLOCKED.
+If real pixels cannot be inspected, block the run.
 
-## Check order
+## Required hard-gate statuses
 
-1. File/image readability.
-2. Correct asset identity.
-3. Requested change is present.
-4. Hard geometry and silhouette gates.
-5. Part count and part-position gates.
-6. Camera/projection/framing.
-7. Material/color constraints.
-8. Lighting/style continuity.
-9. Unrequested changes and generation artifacts.
+Use:
 
-## Default hard gates for 3D modeling reference images
+- `PASS`
+- `FAIL`
+- `NOT_VERIFIABLE`
 
-- correct asset/component identity;
-- correct view or projection;
-- broad silhouette match;
-- part count;
-- critical hole/pin centers;
-- component interface relationship;
-- no new or missing structural parts;
-- requested edit did not alter unrelated hard-locked regions.
+Every required hard gate must appear in the QA report.
 
-## Default soft gates
+For a real auditable run, bind the report to the current `run_id`, iteration,
+receipt id, and result SHA-256. Every required PASS gate needs non-empty visual
+evidence, an inspection method, and either a bound reference digest or an
+explicit self-contained observation.
 
-- exact micro-texture;
-- tiny highlight variation;
-- minor background tonal drift;
-- subtle roughness variation when geometry remains readable.
+Overall `PASS` / `PASS_WITH_NOTES` is valid only when every required hard gate is explicitly `PASS`.
 
-Projects may promote a soft gate to hard.
+## Routing
 
-## Status
+- Localized, non-topology defect → `REPAIR_MINOR`.
+- Identity/projection/silhouette or required topology/component-count failure → `REGENERATE_MAJOR`.
+- Required fact `NOT_VERIFIABLE`, missing evidence, or unavailable inspection → `BLOCKED`.
+- All required hard gates PASS → `PASS` or `PASS_WITH_NOTES`.
 
-- PASS: all hard gates pass and requested change is achieved.
-- PASS_WITH_NOTES: hard gates pass; only non-blocking soft deviations remain.
-- REPAIR_MINOR: hard identity/composition is intact, but one or more localized failures are repairable.
-- REGENERATE_MAJOR: core identity, silhouette, projection, topology, or multiple unrelated regions are wrong.
-- BLOCKED: result cannot be inspected or required references/brief are unavailable.
+Repairs must contain minimal `repair_directives` and must protect gates that already passed.
 
-## Repair output
+## Boundaries
 
-Repairs must be delta-only.
+This is image QA, not CAD metrology. Do not invent dimensions or hidden structure that approved evidence does not support.
 
-Return:
-
-~~~text
-FAILED GATE:
-rear_rivet_center
-
-OBSERVED:
-Rear rivet shifted toward the butt relative to HANDLE_OUTER_MASTER.
-
-CORRECTION DELTA:
-Restore only the rear rivet center to the approved master location.
-Preserve rivet count, diameter, material, handle geometry, blade, camera, and lighting.
-~~~
-
-## No invented precision
-
-This is image QA, not CAD metrology.
-
-Do not invent millimeter tolerances from pixels unless calibrated dimensional data exists.
-
-Use qualitative or normalized image-space judgments when exact measurements are unavailable.
-
-## Persistent report
-
-Use templates/qa-report.toml for project records.
+Persist QA with `templates/qa-report.toml`; the Harness validates completeness before routing.

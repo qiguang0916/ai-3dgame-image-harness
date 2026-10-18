@@ -6,21 +6,47 @@ request_id = "EDIT_001"
 status = "PASS_WITH_NOTES"
 summary = "Example QA report."
 repair_directives = []
+run_id = "ASSET_001__EDIT_001"
+iteration = 1
+receipt_id = "<receipt sha256>"
+result_sha256 = "<result sha256>"
+
+# Required when this report decides a Master candidate. The digest must be
+# calculated from the exact candidate image that was inspected.
+[master_candidate]
+reference_id = "ASSEMBLED_MASTER_R2"
+content_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+actual_pixels_inspected = true
+source_run_id = "ASSET_001__EDIT_002"
+
+# Required hard gates use: PASS | FAIL | NOT_VERIFIABLE.
+# Every gate required by qa_contract/topology must be present.
 
 [[gates]]
 name = "asset_identity"
 severity = "hard"
 status = "PASS"
-note = ""
+note = "Side-by-side inspection confirms the asset identity is preserved."
+inspection_method = "side_by_side_pixel_inspection"
+reference_digest = "<approved reference sha256>"
 
 [[gates]]
 name = "requested_change"
 severity = "hard"
 status = "PASS"
-note = ""
+note = "Direct inspection confirms the requested localized change is present."
+inspection_method = "direct_pixel_inspection"
+observation = "The requested change is visibly present on the bound result."
 
 [[gates]]
 name = "lighting_continuity"
 severity = "soft"
 status = "NOTE"
 note = "Minor non-blocking highlight drift."
+
+# Example when evidence cannot verify a required fact:
+# [[gates]]
+# name = "topology.relationship.some_required_relationship"
+# severity = "hard"
+# status = "NOT_VERIFIABLE"
+# note = "Approved references do not reveal this relationship."

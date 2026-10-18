@@ -1,76 +1,24 @@
 ---
-name: game-image-execution-loop
-description: Execute a game-image run through a host-native image generator by emitting deterministic Host Action Packets, inspecting real outputs, routing Visual QA, and performing bounded repair/regeneration without a local image model or direct API client.
-version: 0.3.0
+name: ai-3dgame-image-harness-execution-loop
+description: Use when a ai-3dgame-image-harness task must run through real reference preflight, host-native image generation or editing, visual QA, bounded repair/regeneration, or a persistent BLOCKED outcome.
 ---
 
-# Game Image Execution Loop
+# AI 3D Game Image Harness Execution Loop
 
-## Purpose
+## Core rule
 
-Turn the Director's structured request into a bounded host-driven loop:
+Deterministic scripts own validation, state, budgets, and next-action packets. The host owns real image generation/editing and visual inspection.
 
-~~~text
-run state
-  -> next_action.py
-  -> Host Action Packet
-  -> host imagegen / vision action
-  -> state update
-  -> next_action.py
-  -> ...
-~~~
+Read when relevant:
 
-The deterministic scripts decide what should happen next.
-
-The Agent/host performs the actual image generation/edit and visual inspection.
-
-## Preferred execution backend
-
-When OpenAI/Codex `$imagegen` or a native image tool exists:
-
-1. load and follow the official imagegen skill;
-2. use its built-in image path by default;
-3. do not ask for `OPENAI_API_KEY` for built-in execution;
-4. do not auto-switch to API/CLI fallback;
-5. obey the Host Action Packet's exact edit target and reference list;
-6. persist the selected result before advancing the run.
-
-Read:
-
-- `references/openai-imagegen-delegation.md`
+- `references/runtime-preflight.md`
 - `references/host-action-protocol.md`
+- `references/host-failure-protocol.md`
+- `references/execution-receipt.md`
 
-## Explicit edit target
+## Initialize
 
-Initial edit requests must identify the image to modify:
-
-~~~toml
-[execution]
-edit_target_reference_id = "ASSEMBLED_MASTER"
-~~~
-
-Support references remain separate.
-
-For repairs, the failed generated result automatically becomes the edit target.
-
-For major regeneration, the approved base target automatically becomes the edit target again.
-
-## State machine
-
-Persistent runs use `scripts/execution_loop.py`.
-
-States:
-
-- `READY`
-- `QA_PENDING`
-- `REPAIR_READY`
-- `REGENERATE_READY`
-- `ACCEPTED`
-- `BLOCKED`
-
-## Host loop
-
-### 1. Initialize
+Real execution performs reference-file preflight by default:
 
 ~~~bash
 python3 scripts/execution_loop.py init \
@@ -79,92 +27,59 @@ python3 scripts/execution_loop.py init \
   --output <run.json>
 ~~~
 
-### 2. Get next action
+Repository fixtures that intentionally omit binary images must opt in:
 
 ~~~bash
-python3 scripts/next_action.py \
-  --asset <asset.toml> \
-  --edit <edit.toml> \
-  --run <run.json>
+python3 scripts/execution_loop.py init ... --dry-run
 ~~~
 
-### 3. Execute packet
+A failed real preflight persists `BLOCKED`; it never proceeds to imagegen.
 
-If action is:
+## Run loop
 
-- `imagegen_generate`: invoke host generation.
-- `imagegen_edit`: edit packet `edit_target` with packet `references` and `prompt`.
-- `visual_qa`: inspect actual pixels and write QA TOML.
-- `deliver`: return final asset.
-- `report_blocked`: stop and explain the blocker.
+Get the deterministic next action:
 
-### 4. After image success
+~~~bash
+python3 scripts/next_action.py --asset <asset.toml> --edit <edit.toml> --run <run.json>
+~~~
+
+After a real image result is persisted:
 
 ~~~bash
 python3 scripts/execution_loop.py mark-generated \
   --run <run.json> \
-  --result <persisted-result-path>
+  --packet <packet.json> \
+  --result <image.png> \
+  --receipt <receipt.json> \
+  --host-attestation "Built-in imagegen executed this packet without fallback."
 ~~~
 
-Then request the next packet.
-
-### 5. After QA
+After real visual inspection:
 
 ~~~bash
-python3 scripts/execution_loop.py apply-qa \
+python3 scripts/execution_loop.py apply-qa --run <run.json> --qa <qa.toml>
+~~~
+
+Repeat until packet action is `deliver` or `report_blocked`.
+
+## Host/backend failure
+
+Do not edit run JSON manually:
+
+~~~bash
+python3 scripts/execution_loop.py mark-blocked \
   --run <run.json> \
-  --qa <qa.toml>
+  --reason-code host_native_imagegen_failed \
+  --action imagegen_edit \
+  --message "Built-in image edit failed."
 ~~~
 
-Then request the next packet.
+No API/CLI fallback is automatic.
 
-## Repair policy
+## Routing invariants
 
-`REPAIR_MINOR`:
-
-- uses failed generated result as edit target;
-- stores full QA gates/directives in run state;
-- compiles correction delta;
-- protects passed gates.
-
-## Major regeneration policy
-
-`REGENERATE_MAJOR`:
-
-- does not keep editing the failed result;
-- returns to the approved base edit target;
-- reuses the validated original brief.
-
-## Stop conditions
-
-Default:
-
-- repair passes: 2
-- regeneration passes: 1
-
-Budget exhaustion -> `BLOCKED`.
-
-No infinite loops.
-
-## Dry-run verification
-
-The repository includes a no-model E2E simulation:
-
-~~~bash
-python3 scripts/demo_e2e.py
-~~~
-
-Expected route:
-
-~~~text
-READY
- -> imagegen_edit
- -> QA_PENDING
- -> REPAIR_READY
- -> imagegen_edit(failed result)
- -> QA_PENDING
- -> ACCEPTED
- -> deliver
-~~~
-
-This validates orchestration only. A real host E2E still requires an environment with an actual image tool.
+- Repair edits the failed result.
+- Major regeneration returns to the approved source.
+- Required topology failure regenerates.
+- Required hard gate `NOT_VERIFIABLE` blocks.
+- Repair/regeneration budgets remain bounded.

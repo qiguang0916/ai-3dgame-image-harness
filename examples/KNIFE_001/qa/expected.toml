@@ -8,37 +8,85 @@ summary = "Example of an acceptable rivet-only material edit."
 repair_directives = []
 
 [[gates]]
-name = "asset_identity"
-severity = "hard"
-status = "PASS"
-note = "KNIFE_001 remains the same asset."
-
-[[gates]]
-name = "requested_change"
-severity = "hard"
-status = "PASS"
-note = "All three existing rivets show the requested brushed cold-silver steel finish."
-
-[[gates]]
-name = "blade_silhouette"
+name = "blade broad silhouette"
 severity = "hard"
 status = "PASS"
 note = ""
 
 [[gates]]
-name = "handle_silhouette"
+name = "handle outer silhouette"
 severity = "hard"
 status = "PASS"
 note = ""
 
 [[gates]]
-name = "rivet_count_and_centers"
+name = "three handle rivets"
 severity = "hard"
 status = "PASS"
-note = "Three rivets remain in approved positions."
+note = ""
 
 [[gates]]
-name = "camera_projection"
+name = "rivet centers"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "full-tang relationship"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "bolster geometry"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "butt-cap relationship"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "approved view/projection"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "exact blade broad silhouette"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "exact handle outer silhouette"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "exact rivet count: three"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "exact rivet centers"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "rivet diameter relationship"
+severity = "hard"
+status = "PASS"
+note = ""
+
+[[gates]]
+name = "camera/projection and crop"
 severity = "hard"
 status = "PASS"
 note = ""

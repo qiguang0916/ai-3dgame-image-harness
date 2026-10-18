@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dry-run the full game-image host protocol without calling an image model."""
+"""Dry-run the full ai-3dgame-image-harness host protocol without calling an image model."""
 
 from __future__ import annotations
 
@@ -13,66 +13,49 @@ if str(SCRIPTS) not in sys.path:
 
 import execution_loop
 import next_action
+import topology_contract
 import validate_project
 
 
-def repair_qa() -> dict:
-    qa = {
-        "document_type": "qa_report",
-        "schema_version": 1,
-        "report_id": "DEMO_QA_REPAIR",
-        "asset_id": "KNIFE_001",
-        "request_id": "KNIFE_001_EDIT_RIVETS_001",
-        "status": "REPAIR_MINOR",
-        "summary": "Rear rivet center drifted.",
-        "repair_directives": [
+def _qa(asset: dict, edit: dict, status: str) -> dict:
+    required = topology_contract.expected_hard_gates(asset, edit)
+    gates = [
+        {
+            "name": name,
+            "severity": "hard",
+            "status": "PASS",
+            "note": "",
+        }
+        for name in required
+    ]
+    directives: list[str] = []
+    summary = "Requested edit passed all hard gates."
+
+    if status == "REPAIR_MINOR":
+        next(
+            gate
+            for gate in gates
+            if gate["name"] == "exact rivet centers"
+        )["status"] = "FAIL"
+        directives = [
             "Restore only the rear rivet center to the approved master position."
-        ],
-        "gates": [
-            {
-                "name": "asset_identity",
-                "severity": "hard",
-                "status": "PASS",
-                "note": "",
-            },
-            {
-                "name": "rivet_count_and_centers",
-                "severity": "hard",
-                "status": "FAIL",
-                "note": "Rear rivet drifted.",
-            },
-        ],
-    }
-    validate_project.validate_document(qa, Path("demo-repair.toml"))
-    return qa
+        ]
+        summary = "Rear rivet center drifted."
 
-
-def pass_qa() -> dict:
     qa = {
         "document_type": "qa_report",
         "schema_version": 1,
-        "report_id": "DEMO_QA_PASS",
+        "report_id": f"DEMO_QA_{status}",
         "asset_id": "KNIFE_001",
         "request_id": "KNIFE_001_EDIT_RIVETS_001",
-        "status": "PASS",
-        "summary": "Requested edit passed all hard gates.",
-        "repair_directives": [],
-        "gates": [
-            {
-                "name": "asset_identity",
-                "severity": "hard",
-                "status": "PASS",
-                "note": "",
-            },
-            {
-                "name": "rivet_count_and_centers",
-                "severity": "hard",
-                "status": "PASS",
-                "note": "",
-            },
-        ],
+        "status": status,
+        "summary": summary,
+        "repair_directives": directives,
+        "gates": gates,
     }
-    validate_project.validate_document(qa, Path("demo-pass.toml"))
+    validate_project.validate_document(
+        qa, Path(f"demo-{status.lower()}.toml")
+    )
     return qa
 
 
@@ -99,7 +82,9 @@ def main() -> int:
     assert packet["action"] == "visual_qa"
     print("2 QA_PENDING -> visual_qa")
 
-    run = execution_loop.apply_qa(run, repair_qa())
+    run = execution_loop.apply_qa(
+        run, _qa(asset, edit, "REPAIR_MINOR")
+    )
     packet = next_action.build_action_packet(asset, edit, run)
     assert packet["action"] == "imagegen_edit"
     assert packet["edit_target"]["path"] == "demo/iteration-1.png"
@@ -110,7 +95,7 @@ def main() -> int:
     assert packet["action"] == "visual_qa"
     print("4 QA_PENDING -> visual_qa")
 
-    run = execution_loop.apply_qa(run, pass_qa())
+    run = execution_loop.apply_qa(run, _qa(asset, edit, "PASS"))
     packet = next_action.build_action_packet(asset, edit, run)
     assert packet["action"] == "deliver"
     assert packet["result_path"] == "demo/iteration-2.png"

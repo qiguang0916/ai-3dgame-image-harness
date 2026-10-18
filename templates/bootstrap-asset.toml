@@ -1,0 +1,24 @@
+document_type = "asset_manifest"
+schema_version = 1
+asset_id = "FIRST_GAME_ASSET_001"
+asset_type = "hero_prop"
+status = "bootstrap"
+
+[locks]
+hard = ["visible silhouette", "camera", "readable component layout"]
+soft = ["neutral lighting", "material micro-texture"]
+
+[qa]
+max_repair_passes = 2
+max_regeneration_passes = 1
+
+[topology]
+forbid_extra_components = true
+
+[[topology.components]]
+id = "main_body"
+count = 1
+required = true
+count_unit = "assembly"
+visual_definition = "one coherent visible main assembly"
+excludes = ["highlights", "cast shadows"]
