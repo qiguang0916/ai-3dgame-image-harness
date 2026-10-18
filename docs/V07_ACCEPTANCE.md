@@ -16,7 +16,7 @@ Verified: new text has explicit role authority, unknowns, selected visible facts
 
 ## Gates
 
-- Unit tests + static validation + dry-run + Skill Creator + GitHub CI: to be filled after final run.
+- Unit tests: **136/136 PASS**; static validation: **PASS**; legacy dry-run: **PASS**; Skill Creator: **PASS**; GitHub Actions for PR #7: **PASS** (checked 2026-10-18).
 - Real Host ImageGen v0.7 LAMP/RADIO: **NOT VERIFIED**.
 - Real KNIFE_001 multiview geometry QA: **NOT VERIFIED**.
 - Structural REGENERATE_MAJOR live image test: **NOT VERIFIED**.
