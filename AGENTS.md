@@ -49,3 +49,17 @@ If adding a contract field, reason code, or state transition, update validator/s
 - First-Master registration must verify source Run, Receipt, real-pixel QA and candidate lineage, not just a declared `approved` JSON.
 - Enforced region/technical-output QA must recompute real pixels; a handwritten PASS is not sufficient.
 - Do not confuse generated QA fixture images, local differential metrics or the self-declared Host attestation with independent real-model production evidence.
+
+## v0.7 — prompt and reference controls
+
+- Keep `[prompt_intelligence]` opt-in; old v0.6 TOML prompts are unchanged.
+- Reference review emits SHA-bound *questions* and palette swatches, not local
+  semantic vision. Codex host must inspect actual image pixels before asserting
+  `inspected_pixels = true`; the hash cannot certify truth.
+- Role overlap requires an explicit authoritative reference; do not silently
+  rank two geometry or material masters.
+- Count/camera preflight conflicts must BLOCK, not be suppressed by a style
+  preset. Unstructured natural-language contradictions still require review.
+- The real-run manifest/edit schema hash prevents silent mid-run prompt changes.
+- During repair apply only failed delta corrections; do not restart a style
+  library or replace the approved edit target.

@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-USAGE = """AI 3D Game Image Harness v0.6 (OpenAI host-native imagegen)
+USAGE = """AI 3D Game Image Harness v0.7 (OpenAI host-native imagegen)
 Usage: ai-3dgame-image-harness <command> [options]
 
 Commands:
@@ -25,6 +25,9 @@ Commands:
   master <subcommand...>   candidate | finalize | register-first
   region-qa <options>      Measure bounded image-region preservation
   asset-report <options>   Check PNG dimensions and alpha against edit contract
+  styles                    List curated, task-specific game art profiles
+  reference-review <opts>   Issue SHA-bound Host visual inspection questions
+  prompt-check <options>   Check authority/conflicts and real reference digests
   version                  Print tool version
 
 This CLI does NOT generate images; use the official Codex/OpenAI built-in
@@ -39,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     command, rest = args[0], args[1:]
     if command == "version":
-        print("ai-3dgame-image-harness 0.6.0-dev")
+        print("ai-3dgame-image-harness 0.7.0-dev")
         return 0
     if command == "doctor":
         modules={name: bool(importlib.util.find_spec(name)) for name in ("PIL", "numpy", "cv2", "skimage")}
@@ -57,7 +60,11 @@ def main(argv: list[str] | None = None) -> int:
     from master_lifecycle import main as master
     from region_quality import main as region
     from asset_report import main as report
+    from prompt_control import main as prompt_control
     actions={
+        "styles": (prompt_control, ["styles", *rest]),
+        "reference-review": (prompt_control, ["reference-review", *rest]),
+        "prompt-check": (prompt_control, ["prompt-check", *rest]),
         "validate":(validate,rest),
         "init":(loop,["init",*rest]),
         "next":(next_action,rest),

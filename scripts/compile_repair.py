@@ -103,6 +103,9 @@ def compile_repair_brief(
 
     lines.extend(["", "REFERENCE ROLES:"])
     lines.extend(reference_lines or ["(none)"])
+    if edit.get("prompt_intelligence"):
+        from prompt_control import repair_authority_guidance
+        lines.extend(["", repair_authority_guidance(asset, edit)])
 
     lines.extend(["", "HARD PRESERVE:"])
     lines.extend(f"- {item}" for item in hard_preserve)

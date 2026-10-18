@@ -43,3 +43,16 @@ The v0.6 production-brief principles were informed by the open-source
 Skill (Apache-2.0). Its source code was **not copied or vendored**. The
 art-direction contract and image QA checks in this repository are written
 independently for the existing OpenAI-native Harness.
+
+## v0.7 prompt-control research
+
+The independently implemented v0.7 workflows were informed by the public
+documented approaches in:
+- https://github.com/freestylefly/awesome-gpt-image-2 (MIT; structured style prompts)
+- https://github.com/YouMind-OpenLab/ai-image-prompts-skill (MIT; retrieval)
+- https://github.com/wuyoscar/GPT-Image2-Skill (MIT; image-to-prompt methods)
+- https://github.com/gamedev-skills/awesome-gamedev-agent-skills (Apache-2.0; game art)
+
+No external prompt gallery, sample art, CLI or paid image provider is vendored;
+the six compact game-style profiles are original descriptions. A permissive
+code license does not automatically grant rights to third-party gallery images.

@@ -182,7 +182,9 @@ def run_preflight(
                 }
 
     if dry_run:
-        return {
+        # A dry run may compile prompts, but does not inspect or hash actual
+        # reference pixels. Never present host observations as real verification.
+        result = {
             "status": "PASS",
             "dry_run": True,
             "reason_code": None,
@@ -190,6 +192,12 @@ def run_preflight(
             "reference_sufficiency": sufficiency,
             "workspace_root": str(base_dir),
         }
+        if edit.get("prompt_intelligence"):
+            result["prompt_intelligence"] = {
+                "status": "NOT_VERIFIED_DRY_RUN",
+                "observations_checked": 0,
+            }
+        return result
 
     checks: list[dict[str, Any]] = []
 
@@ -277,7 +285,23 @@ def run_preflight(
             }
         )
 
-    return {
+    prompt_state = None
+    if edit.get("prompt_intelligence"):
+        from prompt_control import verify_observation_bindings
+        prompt_state = verify_observation_bindings(edit, checks)
+        if prompt_state["status"] != "VERIFIED_DIGEST_ONLY":
+            return {
+                "status": "BLOCKED",
+                "dry_run": False,
+                "reason_code": "reference_digest_mismatch",
+                "checks": checks,
+                "reference_sufficiency": sufficiency,
+                "workspace_root": str(base_dir),
+                "prompt_intelligence": prompt_state,
+                "detail": "; ".join(prompt_state["failures"]),
+            }
+
+    result = {
         "status": "PASS",
         "dry_run": False,
         "reason_code": None,
@@ -285,3 +309,6 @@ def run_preflight(
         "reference_sufficiency": sufficiency,
         "workspace_root": str(base_dir),
     }
+    if prompt_state is not None:
+        result["prompt_intelligence"] = prompt_state
+    return result

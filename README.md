@@ -103,3 +103,25 @@ python3 scripts/demo_e2e.py
 ## 真实验证边界
 
 离线 v0.6 回归可以验证全流程代码和区域 QA。新的真实 Host `$imagegen` E2E、重大结构再生成与复杂 `KNIFE_001` 参考资产仍须由当前 Mac Codex Host 分别执行；没有证据时不得宣称质量提升或 v1.0 READY。进度详情见 `docs/V06_ACCEPTANCE.md`。
+
+## v0.7 — Intelligent Prompt & Reference Control (opt-in)
+
+The v0.7 extension enriches pre-ImageGen prompts without introducing a second
+model, local GPU, API key or paid CLI. Existing v0.6 requests behave the same
+unless `[prompt_intelligence]` is explicitly enabled.
+
+```bash
+./bin/ai-3dgame-image-harness styles
+./bin/ai-3dgame-image-harness reference-review --asset <asset.toml> --edit <edit.toml> --workspace-root <workspace>
+./bin/ai-3dgame-image-harness prompt-check --asset <asset.toml> --edit <edit.toml> --workspace-root <workspace>
+```
+
+The Host must actually inspect reference pixels before filling in visual facts.
+New features include role-authority disambiguation, structured topology/camera
+conflict checks, verified source SHA-256, concise game-art presets and mid-run
+spec immutability. A source digest proves bytes, not the visual truth of a note.
+
+See [v0.7 contract](references/v07-prompt-intelligence.md),
+[v0.7 plan](docs/V07_PLAN.md),
+and [quality-validation limits](docs/V07_ACCEPTANCE.md). Real ImageGen A/B
+is not yet verified; added prompt text does not automatically improve quality.

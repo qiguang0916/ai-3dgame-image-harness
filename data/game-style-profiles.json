@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "license_note": "Original, concise art-direction presets; no third-party prompt corpus or copyrighted gallery images copied.",
+  "profiles": [
+    {
+      "id": "studio_hero_prop",
+      "purpose": ["hero_prop_reference", "game_asset_reference"],
+      "description": "Premium grounded 3D hero prop look development",
+      "guidance": [
+        "Use a controlled studio key and fill light with believable metal, wood or stone roughness and restrained highlights.",
+        "Keep the physical silhouette clear at a gameplay-relevant size; show only the declared components.",
+        "Maintain a stable camera and neutral supporting background, never fabricate hidden reverse-side or internal details."
+      ]
+    },
+    {
+      "id": "orthographic_model_sheet",
+      "purpose": ["hero_prop_reference", "concept_art"],
+      "description": "Clean technical-facing visual sheet for 3D model reference",
+      "guidance": [
+        "Use the requested orthographic or explicitly approved view; avoid unexpected perspective and foreshortening.",
+        "Prioritize consistent outer contour, visible component placement and readable interfaces.",
+        "Do not turn incomplete single-view evidence into invented dimensional or hidden engineering claims."
+      ]
+    },
+    {
+      "id": "workshop_background",
+      "purpose": ["background"],
+      "description": "Subordinate game environment background with readable gameplay foreground",
+      "guidance": [
+        "Use restrained material detail and value contrast so interactive props remain legible.",
+        "Keep broad lighting, surface grain scale and perspective coherent with approved gameplay camera.",
+        "Avoid attention-grabbing invented objects, fake UI, readable text and unnecessary baked shadows."
+      ]
+    },
+    {
+      "id": "game_ui_icon",
+      "purpose": ["ui_art"],
+      "description": "Readable small-scale game UI asset",
+      "guidance": [
+        "Prioritize clear silhouette, consistent stroke/edge language and legibility at actual UI size.",
+        "Separate image artwork from editable code-native interface text; avoid unintended lettering.",
+        "Keep edges clean and verify transparency when output specification requires it."
+      ]
+    },
+    {
+      "id": "game_sprite",
+      "purpose": ["sprite", "sprite_sheet"],
+      "description": "Consistent 2D game art and animation frames",
+      "guidance": [
+        "Preserve character/object identity, palette, silhouette and apparent volume across frames.",
+        "Keep intended facing, pivot and frame boundaries stable; do not add extra characters.",
+        "Specify pixel-grid and palette discipline only when the user actually requests pixel art."
+      ]
+    },
+    {
+      "id": "pbr_texture_reference",
+      "purpose": ["texture_reference"],
+      "description": "Material appearance reference for a 3D game asset",
+      "guidance": [
+        "Describe surface material response, wear distribution, roughness, specular character and microdetail at believable scale.",
+        "Do not invent normals, topology, UV layout or numeric PBR parameter values from a color photograph.",
+        "Preserve physical identity and approved material region boundaries."
+      ]
+    }
+  ]
+}
