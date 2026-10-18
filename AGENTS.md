@@ -63,3 +63,17 @@ If adding a contract field, reason code, or state transition, update validator/s
 - The real-run manifest/edit schema hash prevents silent mid-run prompt changes.
 - During repair apply only failed delta corrections; do not restart a style
   library or replace the approved edit target.
+
+## Steam-grade v0.8 readiness rule
+
+- Use the approved model or Master for structural authority; four Blender
+  clay views have a shared GLB hash but are NOT automatically production
+  textures, a new Master, or proof of a correct hidden Full Tang.
+- A Unity Player build ID and actual screenshot digest are mandatory for
+  in-game shipping evidence. No hand-written `PASS` without bound files.
+- Store capsules require current Steam sizes and content review; store
+  screenshots must be genuine gameplay at >=1920x1080, 16:9.
+- Rights and Steam AI disclosure must be documented. Legal/Steam approval
+  is external, and a SHA cannot prove ownership or aesthetic quality.
+- Never merge to main or claim fully automatic commercial-ready Steam art
+  until real OpenAI Host ImageGen/Unity round trips are independently accepted.

@@ -125,3 +125,21 @@ See [v0.7 contract](references/v07-prompt-intelligence.md),
 [v0.7 plan](docs/V07_PLAN.md),
 and [quality-validation limits](docs/V07_ACCEPTANCE.md). Real ImageGen A/B
 is not yet verified; added prompt text does not automatically improve quality.
+
+## v0.8 — Steam Commercial Art Evidence Gates
+
+Target: fully automated, stable game art production **with fail-closed quality
+and rights controls**. Current v0.8 verifies GLB source-bound geometry views,
+named components, proof-linked Unity Player integration and Steam store
+asset dimensions; it **does not assert Steam approval or full automation**.
+
+```bash
+./bin/ai-3dgame-image-harness render-views --source <model.glb> --output-dir <new-folder>
+./bin/ai-3dgame-image-harness canonical-qa --manifest <new-folder>/manifest.json
+./bin/ai-3dgame-image-harness commercial-gate --manifest <package.json> --output <report.json>
+```
+
+A missing rights review, real visual inspection or Unity Player capture
+blocks in-game release. A concept render cannot be used as a real Steam
+gameplay screenshot. See [commercial spec](docs/V08_COMMERCIAL_TARGET.md)
+and [KNIFE_001 evidence](docs/V08_ACCEPTANCE.md).
