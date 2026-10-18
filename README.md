@@ -143,3 +143,70 @@ A missing rights review, real visual inspection or Unity Player capture
 blocks in-game release. A concept render cannot be used as a real Steam
 gameplay screenshot. See [commercial spec](docs/V08_COMMERCIAL_TARGET.md)
 and [KNIFE_001 evidence](docs/V08_ACCEPTANCE.md).
+
+## Native Codex production autopilot (v0.9)
+
+```bash
+python3 scripts/cli.py autopilot run --asset path/asset.toml --edit path/edit.toml --workspace-root /absolute/workspace --run /absolute/workspace/run.json
+python3 scripts/cli.py autopilot run --asset path/asset.toml --edit path/edit.toml --workspace-root /absolute/workspace --run /absolute/workspace/run.json --resume
+python3 scripts/cli.py autopilot status --run /absolute/workspace/run.json
+```
+
+Requires authenticated ChatGPT Codex and built-in native imagegen. No API key,
+fallback provider or local model. Optional `--codex /absolute/codex` selects the
+executable; `--max-actions 8` bounds work per invocation. Existing state-machine
+budgets still bound repairs and regeneration. Partial evidence blocks rather
+than overwriting output or automatically repeating a host action. ACCEPTED emits
+a non-commercial deliverable report, without Master promotion or Steam approval.
+The new runner's live E2E is pending; see [v0.9 acceptance](docs/V09_ACCEPTANCE.md)
+for the separate prior LAMP result and provenance/critic limitations.
+
+## v0.9 — Unity release evidence bridge
+
+Commercial in-game deliverables must pass the independent `ai-3dgame-test-harness`
+seven-category same-commit release proof, not a self-declared Unity PASS.
+This bridge never changes the user's Unity project:
+
+```bash
+./bin/ai-3dgame-image-harness unity-proof \
+  --manifest /path/real-game-release-evidence.json \
+  --commit <40-character-game-commit> \
+  --output /path/immutable-unity-proof.json
+```
+
+The `commercial-gate` now also checks a bound `unity_integration.test_harness_release`
+source file, the real Unity Player capture and matching build ID.
+See [v0.9 Unity bridge](docs/V09_UNITY_RELEASE_BRIDGE.md).
+Historical game QA bugs and missing rights evidence remain release blockers.
+
+## v0.9 actual ImageGen + Unity Player delivery audit
+
+```bash
+# Native Codex subscription-only production with signed receipt, visual critic
+# and bounded repair; no OPENAI_API_KEY or local image model.
+./bin/ai-3dgame-image-harness autopilot run \
+  --asset <asset.toml> --edit <edit.toml> \
+  --workspace-root <workspace> --run <new-run.json> --max-actions 8
+
+# Continue a persisted, auditable run without overwriting historical attempts.
+./bin/ai-3dgame-image-harness autopilot run \
+  --asset <asset.toml> --edit <edit.toml> \
+  --workspace-root <workspace> --run <run.json> --resume
+
+# Independently rehash the actual native source, all receipts, visual QA
+# records, exact input/output PNGs and raw event transcripts.
+./bin/ai-3dgame-image-harness production-audit \
+  --run <real-run.json> --output <new-audit.json>
+
+# Capture actual Unity Player HUD/knife A+B using engine screenshot API.
+./bin/ai-3dgame-image-harness player-capture \
+  --app <SecondLifeWorkshop-0.2.0.app> --output-dir <new-private-dir>
+./bin/ai-3dgame-image-harness player-capture \
+  --app <SecondLifeWorkshop-0.2.0.app> --output-dir <private-dir> --verify-existing
+```
+
+Real LAMP and RADIO native generation/repair were accepted; the real RADIO
+production integrity audit and three real Unity Player screenshots passed.
+**No Steam commercial release is certified**: independent full game QA,
+complex KNIFE_001 visual approval, rights/provenance and relevant Steam
+review/disclosure still require evidence. See `docs/V09_ACCEPTANCE.md`.

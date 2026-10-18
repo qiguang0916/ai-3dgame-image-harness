@@ -28,6 +28,13 @@ This is a professional game image-production contract and QA harness, not a draw
 
 ## Host loop
 
+For an explicitly authorized unattended native Codex run, use
+`python3 scripts/cli.py autopilot run --asset <asset.toml> --edit <edit.toml> --workspace-root <workspace> --run <workspace/run.json>`.
+Use `--resume` for existing state and `autopilot status --run <run.json>` to inspect it.
+This subscription-only driver blocks on unverifiable native provenance, critic
+failure or partial evidence; it never promotes a Master. Read
+`docs/V09_ACCEPTANCE.md` for evidence limits and reconciliation behavior.
+
 `./bin/ai-3dgame-image-harness doctor` → `validate` → `init` → `next` → **host-native ImageGen** → `generated` (receipt) → actual-pixel QA → `qa` (apply) → deliver/repair/regenerate/block.
 
 For first Master, finalize the independent QA promotion before registering an active manifest.
@@ -69,3 +76,24 @@ Unity Player runtime capture and, for store graphics, current Steam
 dimensions/copy rules. An unreviewed concept picture or Blender reference
 may **never** be presented as real Steam gameplay. A PASS means ready for
 Steam submission review, not Steam-approved; unresolved evidence must BLOCK.
+
+## Unity release evidence bridge
+
+Do not invent Unity or Steam approvals. Before an in-game asset may ship,
+obtain independent `ai-3dgame-test-harness` evidence for seven same-commit
+release categories. Read `docs/V09_UNITY_RELEASE_BRIDGE.md` and run
+`unity-proof` (read-only) to check raw file:// evidence SHA-256 and native
+Player screenshot binding. Missing/failing evidence must keep
+`commercial-gate` BLOCKED, even when model GLB views and image QA pass.
+
+## v0.9 — real host delivery and Player evidence
+
+For an actual Codex ChatGPT-subscription ImageGen production run, use
+`autopilot run` / `--resume`; see `docs/V09_ACCEPTANCE.md`. The host uses
+the authorized native Codex ImageGen only, with no OpenAI API key fallback.
+Use `production-audit` to rehash every native generation, receipt and
+critic record; a fabricated synthetic stub may not pass this integrity
+gate. For a real game image, use `player-capture` on an existing Unity
+Player app where the opt-in `-inspectHtmlQaCapture` feature exists, and
+`--verify-existing` to detect later PNG/log/executable changes. It does not
+replace independent seven-category `unity-proof` or Steam release review.

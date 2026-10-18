@@ -10,10 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-USAGE = """AI 3D Game Image Harness v0.7 (OpenAI host-native imagegen)
+USAGE = """AI 3D Game Image Harness v0.9 (OpenAI host-native imagegen)
 Usage: ai-3dgame-image-harness <command> [options]
 
 Commands:
+  autopilot run|status      Bounded native Codex subscription production loop
   doctor                    Check local deterministic QA dependencies
   validate [files...]      Validate TOML manifest/edit/QA contracts
   init <options>           Create an auditable run (execution_loop.py init)
@@ -31,10 +32,13 @@ Commands:
   render-views --source ...  Render canonical GLB geometry references (Blender)
   canonical-qa --manifest ... Validate 4 source-bound views and visible silhouettes
   commercial-gate <opts>  Fail-closed Steam commercial asset evidence review
+  unity-proof <opts>      Verify independent seven-category same-commit Unity release evidence
+  player-capture <opts>    Capture actual Unity Player A/B inspection screenshots
+  production-audit <opts>   Rehash real Host ImageGen receipts, QA and native source evidence
   version                  Print tool version
 
-This CLI does NOT generate images; use the official Codex/OpenAI built-in
-$imagegen skill for generation and editing, with no automatic API fallback.
+Autopilot delegates generation to native Codex built-in imagegen.
+There is no automatic API fallback.
 """
 
 
@@ -44,8 +48,11 @@ def main(argv: list[str] | None = None) -> int:
         print(USAGE)
         return 0
     command, rest = args[0], args[1:]
+    if command == 'autopilot':
+        from production_autopilot import main as autopilot
+        return autopilot(rest)
     if command == "version":
-        print("ai-3dgame-image-harness 0.7.0-dev")
+        print("ai-3dgame-image-harness 0.9.0-dev")
         return 0
     if command == "doctor":
         modules={name: bool(importlib.util.find_spec(name)) for name in ("PIL", "numpy", "cv2", "skimage")}
@@ -105,6 +112,9 @@ def main(argv: list[str] | None = None) -> int:
     from region_quality import main as region
     from asset_report import main as report
     from commercial_art_gate import main as commercial_gate
+    from unity_release_bridge import main as unity_proof
+    from unity_player_capture import main as player_capture
+    from production_audit import main as production_audit
     from prompt_control import main as prompt_control
     actions={
         "styles": (prompt_control, ["styles", *rest]),
@@ -121,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
         "region-qa":(region,rest),
         "asset-report":(report,rest),
         "commercial-gate":(commercial_gate,rest),
+        "unity-proof":(unity_proof,rest),
+        "player-capture":(player_capture,rest),
+        "production-audit":(production_audit,rest),
     }
     if command not in actions:
         print(f"Unsupported command: {command}\n\n{USAGE}",file=sys.stderr)
