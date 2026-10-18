@@ -57,3 +57,15 @@ objects or infer dimensions. Run `prompt-check` before `init`.
 `prompt_intelligence` is opt-in, with approved Master and hard locks always
 above style inspiration. Never substitute gallery prompts for an approved
 reference; no extra API or local generation engine.
+
+## v0.8 — Steam commercial release candidate gates
+
+When preparing final game/Steam assets, read `docs/V08_COMMERCIAL_TARGET.md`
+and `docs/V08_ACCEPTANCE.md`. For GLB 3D sources use optional Blender
+`render-views` (read-only geometry reference; NOT AI drawing) then
+`canonical-qa`. Run `commercial-gate` on an evidence-bound package manifest
+to require actual image/glb hashes, source rights review, visual QA,
+Unity Player runtime capture and, for store graphics, current Steam
+dimensions/copy rules. An unreviewed concept picture or Blender reference
+may **never** be presented as real Steam gameplay. A PASS means ready for
+Steam submission review, not Steam-approved; unresolved evidence must BLOCK.
