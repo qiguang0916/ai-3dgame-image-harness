@@ -15,13 +15,13 @@ import execution_loop as loop
 import production_autopilot as autopilot
 import test_v06_integration as fixtures
 from test_v09_autopilot import StubHost
-from test_v10_batch_production import BatchTests
+import test_v10_batch_production as batch_fixtures
 from validate_project import ValidationError
 
 
 class DurabilityTests(unittest.TestCase):
     def fixture(self, root):
-        return BatchTests().fixture(root)
+        return batch_fixtures.BatchTests().fixture(root)
 
     def test_run_state_atomic_replace_failure_preserves_previous_valid_bytes(self):
         with tempfile.TemporaryDirectory() as d:
@@ -117,6 +117,40 @@ class DurabilityTests(unittest.TestCase):
                 autopilot.drive(asset, other, root, run, resume=True, host=followup)
             self.assertEqual(followup.actions, [])
 
+
+
+    def test_accepted_batch_deleted_or_replaced_png_blocks_without_model_retry(self):
+        for failure in ("removed", "corrupt"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                manifest, state, host, _ = self.fixture(root)
+                batch.run_batch(manifest, root, state, host=host)
+                run_path = root / batch.make_plan(manifest, root)["jobs"][0]["run"]
+                run = json.loads(run_path.read_text())
+                source = root / run["current_receipt"]["result"]["path"]
+                if failure == "removed":
+                    source.unlink()
+                else:
+                    source.write_bytes(b"not-an-image")
+                followup = StubHost(host.image)
+                result = batch.run_batch(manifest, root, state, resume=True, host=followup)
+                self.assertEqual(result["state"], "BLOCKED")
+                self.assertEqual(result["counts"]["ERROR"], 1)
+                self.assertEqual(followup.actions, [])
+
+    def test_accepted_batch_receipt_tamper_blocks_without_host(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            manifest, state, host, _ = self.fixture(root)
+            batch.run_batch(manifest, root, state, host=host)
+            run_path = root / batch.make_plan(manifest, root)["jobs"][0]["run"]
+            run = json.loads(run_path.read_text())
+            run["current_receipt"]["result_sha256"] = "0" * 64
+            run_path.write_text(json.dumps(run))
+            followup = StubHost(host.image)
+            result = batch.run_batch(manifest, root, state, resume=True, host=followup)
+            self.assertEqual(result["counts"]["ERROR"], 1)
+            self.assertEqual(followup.actions, [])
 
 if __name__ == "__main__":
     unittest.main()
