@@ -107,6 +107,30 @@ def strict_composite(reference: Path, candidate: Path, contract: dict[str, Any],
     boundary = permitted & ~interior
     boundary_changed = int((changed & boundary).sum())
 
+    # Diagnostic seam discontinuity relative to original gradients. Sample
+    # only adjacent pixel pairs crossing the editable/protected boundary.
+    # This is NOT a semantic/material/lighting approval or an automatic PASS.
+    seam_excess = []
+    for keep_a, keep_b, after_a, after_b, before_a, before_b in (
+        (permitted[:, :-1], permitted[:, 1:],
+         composed[:, :-1], composed[:, 1:],
+         reference_data[:, :-1], reference_data[:, 1:]),
+        (permitted[:-1, :], permitted[1:, :],
+         composed[:-1, :], composed[1:, :],
+         reference_data[:-1, :], reference_data[1:, :]),
+    ):
+        crossings = keep_a ^ keep_b
+        if not bool(crossings.any()):
+            continue
+        new_gap = np.max(np.abs(after_a.astype(np.int16) -
+                                after_b.astype(np.int16)), axis=2)
+        old_gap = np.max(np.abs(before_a.astype(np.int16) -
+                                before_b.astype(np.int16)), axis=2)
+        seam_excess.extend(np.maximum(0, new_gap - old_gap)[crossings].tolist())
+    seam_extra_max = max(seam_excess, default=0)
+    seam_extra_mean = (round(sum(seam_excess) / len(seam_excess), 3)
+                       if seam_excess else 0.0)
+
     buf = io.BytesIO()
     params: dict[str, Any] = {"format": "PNG"}
     if original_profile:
@@ -126,6 +150,9 @@ def strict_composite(reference: Path, candidate: Path, contract: dict[str, Any],
         "protected_pixel_mismatches": protected_mismatch,
         "boundary_pixels": int(boundary.sum()),
         "boundary_changed_pixels": boundary_changed,
+        "seam_crossing_pairs": len(seam_excess),
+        "seam_excess_max_channel_jump": int(seam_extra_max),
+        "seam_excess_mean_channel_jump": seam_extra_mean,
         "visual_seam_review_required": True,
         "texture_and_geometry_approval": "NOT_VERIFIED",
         "commercial_release_certified": False, "steam_approved": False,
