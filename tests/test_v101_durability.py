@@ -172,5 +172,22 @@ class DurabilityTests(unittest.TestCase):
                 self.assertEqual(rc, 2)
                 self.assertEqual(json.loads(output.getvalue())["state"], "ERROR")
 
+
+    def test_two_jobs_same_specs_must_not_accept_swapped_run_receipts(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            manifest, state, host, _ = batch_fixtures.BatchTests().fixture(root, jobs=2)
+            self.assertEqual(batch.run_batch(manifest, root, state, host=host)["counts"]["ACCEPTED"], 2)
+            specs = batch.make_plan(manifest, root)["jobs"]
+            run_a, run_b = (root / spec["run"] for spec in specs)
+            original_a, original_b = run_a.read_bytes(), run_b.read_bytes()
+            run_a.write_bytes(original_b)
+            run_b.write_bytes(original_a)
+            followup = StubHost(host.image)
+            checked = batch.run_batch(manifest, root, state, resume=True, host=followup)
+            self.assertEqual(checked["state"], "BLOCKED")
+            self.assertEqual(checked["counts"]["ERROR"], 2)
+            self.assertEqual(followup.actions, [])
+
 if __name__ == "__main__":
     unittest.main()
