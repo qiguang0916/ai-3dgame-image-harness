@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from artifact_integrity import resolve_in_workspace, sha256_bytes, sha256_file
+from artifact_integrity import canonical_json_bytes, resolve_in_workspace, sha256_bytes, sha256_file
 from region_quality import _pixel_rect, validate_region_contract
 from runtime_preflight import validate_image_file
 from validate_project import ValidationError, load_document, validate_document
@@ -118,6 +118,7 @@ def strict_composite(reference: Path, candidate: Path, contract: dict[str, Any],
         "schema_version": 1, "state": "CANDIDATE_NEEDS_VISUAL_REVIEW",
         "original_sha256": source_sha, "candidate_sha256": generated_sha,
         "mask_sha256": mask_sha, "output_sha256": output_sha,
+        "contract_sha256": sha256_bytes(canonical_json_bytes(contract)),
         "width": width, "height": height, "image_mode": original_mode,
         "editable_pixels": int(permitted.sum()),
         "changed_editable_pixels": changed_count,
