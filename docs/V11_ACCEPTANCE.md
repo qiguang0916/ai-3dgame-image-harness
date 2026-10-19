@@ -3,7 +3,7 @@
 Date: 2026-10-19 (America/Los_Angeles).
 Parent: v0.10.1-dev at commit bec08e3.
 Development branch: feat/v0.11-asset-contract.
-Status: CODE_VALIDATED_LOCALLY; GITHUB_CI_PENDING; NO_NEW_REAL_IMAGEGEN_OR_UNITY_PROOF; NOT_STEAM_CERTIFIED.
+Status: CODE_VALIDATED / ONE REAL NATIVE GENERATION VERIFIED / CRITIC BLOCKED / NOT STEAM CERTIFIED.
 
 ## 1. New design contract (opt-in)
 
@@ -77,15 +77,28 @@ git diff --check
 ./bin/ai-3dgame-image-harness version
 ```
 
-Local results after final code changes: validator **10/10 TOML files PASS**, unit suite **207 tests PASS**, E2E **DRY RUN PASS**, `git diff --check` **PASS**, CLI `0.11.0-dev`. This verifies code contracts, not actual model image quality. GitHub CI outcome is tracked separately after push.
+Initial v0.11 development commit 8c44a6c: 10 config docs, 207 Python tests, dry-run E2E and GitHub CI run 39255014047 all passed. Live-smoke-driven uncertainty regression requires final revalidation after this change.
 
 ## 5. Remaining v0.11 release gates
 
 - **B03 prompt intelligence**: current improvement compiles structured output category/style/authorities into original Host prompt; comprehensive alternative decomposition/selection based on real visual A/B is not independently proven.
 - **B06 KNIFE_001**: Original approved v030E geometry and latest design references can differ. Current v030E GLB/four clay views do not prove hidden tang/PBR/Unity appearance, and image model cannot promote nine other references to a Master. Human reference authority reconciliation and real visual QA are **BLOCKED**; no new production Master is declared here.
-- **v0.11 real visual sample**: new style kits and category outputs have **not yet been tested on actual Codex ImageGen images**. Therefore this version is code-level development rather than production art-quality acceptance.
+- **v0.11 live image test**: one actual Codex ImageGen asset was generated, but the independent critic returned BLOCKED. No new v0.11 production artwork has passed full Host QA; diverse real-run validation remains pending.
 - **v0.13/v0.14/v1.0 gates**: multi-asset live benchmark, independent visual QA, Unity Editor/Player import, seven-category same-commit release proof, actual source license signoff, Steam disclosures and Valve review remain external/uncompleted.
 
 ### Independence policy
 
 A successful CLI `asset-spec inspect` or synthetic `StubHost` ACCEPTED run certifies only schema/state machine operation. It must never be presented as independently verified image aesthetics, human rights/title, real model identity, fully automatic Steam readiness or Unity Player validation.
+
+## 6. Real Codex ImageGen smoke and QA blocker (2026-10-19)
+
+- Private path: HOME/ai-3dgame-image-harness/.ai-3dgame-image-harness/v11-native-smoke-20261019/ (private, ignored by Git).
+- Auth: Codex login status reports Logged in using ChatGPT, not API key.
+- Native action count: one real ImageGen generate plus one independent visual critic call; overall autopilot exit 2 / BLOCKED, no automatic retry.
+- Generated original fictional lantern: PNG RGB 1536x1024, result SHA prefix 8b5fbd6a4327; SHA matches Receipt and Codex generated_images native source. Completed copy event and transcript hash verified; no distinct structured image model events were exposed, so model identity is NOT cryptographically attested.
+- Critic issued a real QA TOML with four gates: identity PASS, image.technical_output NOT_VERIFIABLE, art_v2.category_intent PASS, art_v2.style_consistency PASS; overall QA BLOCKED because technical file inspection could not be confirmed.
+- Previous technical gate verifier incorrectly rejected NOT_VERIFIABLE as unsupported even when deterministic image measurements passed, masking the existing critic record into a generic exception. New code allows a conservative unknown technical QA gate to correctly transition to BLOCKED and retain that report, while rejecting any false PASS against measured technical failure.
+- Three offline regression tests added: measured PASS plus critic unknown -> BLOCKED; measured FAIL plus critic unknown -> no false PASS; unsupported statuses still refused.
+- Re-evaluating the private saved QA in memory (without writing or repeating Host calls) yields BLOCKED / visual_inspection_unavailable with measured technical PASS. The original Run remains BLOCKED on disk.
+
+This is a real native generation smoke and a successfully preserved failure, NOT completed native generation-to-visual-acceptance or Unity/Steam qualification. Use a separate fresh Run if conducting a future independent visual critic investigation.

@@ -50,10 +50,14 @@ def inspect_output(path: Path, spec: dict[str, Any]) -> dict[str, Any]:
 def verify_output_gate(spec: dict[str,Any], image: Path,
                        reported_status: str) -> dict[str,Any]:
     measured=inspect_output(image,spec)
-    if measured["status"]=="FAIL" and reported_status!="FAIL":
-        raise ValidationError("technical output QA measured FAIL; cannot report PASS")
-    if measured["status"]=="PASS" and reported_status not in {"PASS","FAIL"}:
+    if reported_status not in {"PASS", "FAIL", "NOT_VERIFIABLE"}:
         raise ValidationError("technical output gate must have a supported status")
+    # A critic may truthfully report NOT_VERIFIABLE despite deterministically
+    # measurable pixels. Preserve that uncertainty and route the required hard
+    # gate to BLOCKED rather than discarding completed QA as a Host failure.
+    # Never let a critic claim PASS when objective image measurements FAIL.
+    if measured["status"] == "FAIL" and reported_status == "PASS":
+        raise ValidationError("technical output QA measured FAIL; cannot report PASS")
     return measured
 
 

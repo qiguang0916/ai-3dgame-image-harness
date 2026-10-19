@@ -244,3 +244,8 @@ Optional `[asset_spec_v2]` in a standard `schema_version=1` edit TOML adds seven
 A scaffolding command creates only draft TOML, **not actual artwork or rights approval**. For a batch that must share one coherent visual family, set the optional top-level `style_kit_sha256` in `batch.json`; each v2 edit in that batch must contain an identical, SHA-validated Style Kit. A mismatch blocks production **before** any model call.
 
 The original ImageGen backend, audit receipts, immutable Master policy and Unity proof requirements are retained. v2 concept and Steam marketing outputs are blocked from being mislabeled as Unity in-game asset staging. For examples and remaining real-image/KNIFE_001 gates, see [v0.11 acceptance](docs/V11_ACCEPTANCE.md).
+
+
+### Live smoke and critic uncertainty
+
+The v0.11 private native-host test generated one real 1536x1024 PNG and verified source/Receipt hashes, but the independent critic returned BLOCKED on technical-output uncertainty. The tool now safely preserves NOT_VERIFIABLE rather than discarding its QA record. No new visual quality acceptance or Unity/Steam certification is claimed. See docs/V11_ACCEPTANCE.md.
