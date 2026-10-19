@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         from batch_production import main as batch
         return batch(rest)
     if command == "version":
-        print("ai-3dgame-image-harness 0.10.0-dev")
+        print("ai-3dgame-image-harness 0.10.1-dev")
         return 0
     if command == "doctor":
         modules={name: bool(importlib.util.find_spec(name)) for name in ("PIL", "numpy", "cv2", "skimage")}
