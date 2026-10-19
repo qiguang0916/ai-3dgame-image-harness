@@ -1,6 +1,6 @@
 # v0.12 Phase 1 — SHA-locked exact region preservation
 
-**Status:** CODE IMPLEMENTATION / REMOTE CI PENDING. This is a deterministic post-edit safety tool, **not** a new image model, visual acceptance, commercial certification, or replacement Master. Base is v0.11 development branch `feat/v0.11-asset-contract` after the successful audited native E2E.
+**Status:** CODE_VALIDATED_IN_GITHUB_CI / ART_VISUAL_QA_PENDING / NOT_UNITY_OR_STEAM_CERTIFIED. This is a deterministic post-edit safety tool, **not** a new image model, visual acceptance, commercial certification, or replacement Master. Base is v0.11 development branch `feat/v0.11-asset-contract` after the successful audited native E2E.
 
 ## Problem and contract
 
@@ -51,15 +51,24 @@ The mask is a separate *protection* contract, not an implicit segmentation predi
   --report /absolute/workspace/qa/strict-v001.json
 ```
 
-Report state: **`CANDIDATE_NEEDS_VISUAL_REVIEW`** with source/candidate/mask/output SHA, target pixel changes, outside mismatch count (must be zero), protected mismatch count (must be zero), measured boundary changes and explicit `visual_seam_review_required=true`. `commercial_release_certified=false` and `steam_approved=false`.
+Report state: **`CANDIDATE_NEEDS_VISUAL_REVIEW`** with complete ROI contract SHA plus source/candidate/mask/output SHA, target pixel changes, outside mismatch count (must be zero), protected mismatch count (must be zero), measured boundary changes and explicit `visual_seam_review_required=true`. `commercial_release_certified=false` and `steam_approved=false`.
 
 Candidate provenance is a **separate gate**: for real production use, verify the input candidate came from an auditable native ImageGen Run with `production-audit`; a locally constructed image by itself is not native image origin proof. Do not stage into Unity or Steam before independent QA, approved source rights and appropriate runtime tests.
 
 ## Verification scope
 
 - New synthetic regression cases cover exact outside-ROI protection, protected pixel inside editable ROI, hash pinning, image dimensions/mode, binary mask validation, no-op changes, fully protected targets, non-overwrite, path traversal/symlinks and schema constraints.
-- The v0.12 test suite uses deliberately synthetic 12x12 PNGs. It proves **pixel algorithm behavior only**, not advanced art quality or real model fidelity.
+- The v0.12 test suite uses deliberately synthetic 12x12 PNGs and a separate full CLI fixture. It proves **pixel algorithm behavior only**, not advanced art quality or real model fidelity.
 - Historical real LAMP/RADIO input and output PNGs remain read-only in the private v0.9 evidence archive. Any new A/B benchmark must use fresh, separately named private output paths, indicate whether ROI is merely approximate or artist-reviewed, and never upgrade history to a new approved Master.
+
+## GitHub remote validation (2026-10-19)
+
+- Branch: `feat/v0.12-precision-region`, base: v0.11 code + successful independent native ImageGen smoke.
+- GitHub PR: [#11](https://github.com/qiguang0916/ai-3dgame-image-harness/pull/11), retained as Draft until real-image seam QA.
+- GitHub Actions run [39261468001](https://github.com/qiguang0916/ai-3dgame-image-harness/actions/runs/39261468001): **SUCCESS**. 224 Python tests PASS; schema validation PASS; legacy host-protocol dry-run PASS.
+- CLI-level regression explicitly tests full valid TOML, SHA-bound ROI report, no overwrite on repeated invocation, and compatibility with v0.6 edit manifests.
+- The original Mac worktree branch also contained a local first implementation and 11 passing tests before its Desktop Commander monthly tool quota was exhausted. Remote GitHub edits were then applied to the remote branch. **Mac worktree has not been synchronized to this remote branch since that quota block**; preserve its uncommitted code when eventually reconciling.
+- No real historical LAMP/RADIO PNG A/B was executed in this phase because the private Mac files were no longer reachable. Reports of numerical 0 outside-target mismatches refer to synthetic fixture tests, not a passed visual fidelity benchmark. Do not fabricate private evidence or mark C09 complete.
 
 ## Remaining v0.12 tasks
 
