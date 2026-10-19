@@ -254,3 +254,17 @@ The v0.11 private native-host test generated one real 1536x1024 PNG and verified
 ### v0.11 successful audited native smoke
 
 A second fresh isolated Codex ImageGen job (`WORKBENCH_STOOL_001`) completed **ACCEPTED**, independent critic **PASS_WITH_NOTES** (4/4 required gates PASS), and production-audit **PASS** (1 generation/1 QA, zero integrity errors). The original BLOCKED lantern run remains unmodified. Evidence is local/private; see [v0.11 acceptance §7](docs/V11_ACCEPTANCE.md). This is not Unity, commercial rights, or Steam certification.
+
+
+## v0.12 — Strict image-region preservation (Phase 1, opt-in)
+
+For a *local edit* with explicit editable ROI and a SHA-locked, same-size binary protection mask, `precision-compose` restores source pixels outside the ROI or in protected mask pixels. It writes a **new** candidate PNG and an immutable evidence report. Source, candidate and mask must share exact pixel coordinates and suitable PNG modes. The output is always `CANDIDATE_NEEDS_VISUAL_REVIEW`: no artificial seam/material approval or Steam/Unity certification is granted.
+
+```bash
+./bin/ai-3dgame-image-harness precision-compose \
+  --workspace-root <workspace> --edit <edit.toml> \
+  --reference <approved.png> --candidate <generated.png> \
+  --output <new-composited.png> --report <new-qa-report.json>
+```
+
+See [v0.12 mask contract, technical constraints and remaining QA work](docs/V12_PRECISION_PHASE1.md). Historical LAMP/RADIO v0.9 source files remain immutable; a modeled improvement in pixel preservation is not the same as proven better subjective game art.
