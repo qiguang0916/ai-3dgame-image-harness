@@ -249,3 +249,8 @@ The original ImageGen backend, audit receipts, immutable Master policy and Unity
 ### Live smoke and critic uncertainty
 
 The v0.11 private native-host test generated one real 1536x1024 PNG and verified source/Receipt hashes, but the independent critic returned BLOCKED on technical-output uncertainty. The tool now safely preserves NOT_VERIFIABLE rather than discarding its QA record. No new visual quality acceptance or Unity/Steam certification is claimed. See docs/V11_ACCEPTANCE.md.
+
+
+### v0.11 successful audited native smoke
+
+A second fresh isolated Codex ImageGen job (`WORKBENCH_STOOL_001`) completed **ACCEPTED**, independent critic **PASS_WITH_NOTES** (4/4 required gates PASS), and production-audit **PASS** (1 generation/1 QA, zero integrity errors). The original BLOCKED lantern run remains unmodified. Evidence is local/private; see [v0.11 acceptance §7](docs/V11_ACCEPTANCE.md). This is not Unity, commercial rights, or Steam certification.

@@ -3,7 +3,7 @@
 Date: 2026-10-19 (America/Los_Angeles).
 Parent: v0.10.1-dev at commit bec08e3.
 Development branch: feat/v0.11-asset-contract.
-Status: CODE_VALIDATED / ONE REAL NATIVE GENERATION VERIFIED / CRITIC BLOCKED / NOT STEAM CERTIFIED.
+Status: CODE_VALIDATED / NATIVE_IMAGEGEN_SMOKE_ACCEPTED_AND_PRODUCTION_AUDIT_PASS / NOT STEAM CERTIFIED.
 
 ## 1. New design contract (opt-in)
 
@@ -102,3 +102,19 @@ A successful CLI `asset-spec inspect` or synthetic `StubHost` ACCEPTED run certi
 - Re-evaluating the private saved QA in memory (without writing or repeating Host calls) yields BLOCKED / visual_inspection_unavailable with measured technical PASS. The original Run remains BLOCKED on disk.
 
 This is a real native generation smoke and a successfully preserved failure, NOT completed native generation-to-visual-acceptance or Unity/Steam qualification. Use a separate fresh Run if conducting a future independent visual critic investigation.
+
+## 7. Second isolated live production: CLOSED technical-QA blocker
+
+Date: 2026-10-19. Code base used: feat/v0.11-asset-contract commit d67e9ae.
+Private evidence: `$HOME/ai-3dgame-image-harness/.ai-3dgame-image-harness/v11-native-e2e-20261019-second/`.
+No private generated images or original Host transcripts were added to public Git.
+
+- Asset: WORKBENCH_STOOL_001, a fictional original workshop stool game-prop concept reference (no externally sourced images). The AssetSpec v2 scaffold was changed explicitly before the first run.
+- Native Codex ImageGen executed **once**, then an independent visual QA review executed **once**, with max-actions=2. The final autopilot CLI exit is **0**, Run state is **ACCEPTED**, and the delivery record is present.
+- Generated PNG: 1536x1024 RGB, SHA256 `51cfd0b2574de6917e4d1e217caecb1d83ec506b42f01dfa494fa0c0355366b1`. The result is bound to its input-spec SHA and Receipt; original Host event transcripts are locally preserved.
+- Independent critic returned **PASS_WITH_NOTES**. All four actual required gates are PASS: `declared visible object identity`, `image.technical_output`, `art_v2.category_intent`, `art_v2.style_consistency`.
+- Technical precheck: genuine original PNG, 1536x1024, alpha absent, SHA equal to candidate; deterministic check PASS was bound and supplied to critic without making subjective image quality claims.
+- Independent `production-audit`: **PASS**, exactly 1 source PNG generation step, 1 QA step, 0 integrity failures; release_status=NOT_CERTIFIED and steam_approved=false.
+- Initial BLOCKED lantern test from section 6 remains immutable and BLOCKED. Its separately issued diagnostic QA PASS did not rewrite the original historical Run. The latest success uses a completely fresh run/production directory.
+
+**Interpretation:** native Codex ImageGen → receipt → independent visual QA → audited delivery **works for one new v0.11 item**. v0.11's code-level and single-item smoke acceptance can be recorded, but a single prop concept does not prove reliable large-batch game art, exact KNIFE_001 geometry, human source rights, Unity Player, Steam listing or v1.0 commercial-readiness. Real multi-category and A/B fidelity studies are pending v0.12/v0.13.
