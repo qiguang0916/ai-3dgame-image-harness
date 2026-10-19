@@ -99,3 +99,10 @@ If adding a contract field, reason code, or state transition, update validator/s
 - Full commercial release remains BLOCKED without independent, same-commit
   game-test Harness verification across all categories, human source rights,
   game-scale visual approval and applicable Steam disclosures.
+
+## v0.10 — Commercial batch workflow
+
+- Enforce human rights-review records + SHA bindings + commercial license allowlist before any native model work. Hashes do not prove real rights.
+- Never rerun ambiguous/partial Host calls or overwrite accepted work. Bound job and action counts, maintain immutable batch plan and sources across resumes.
+- No API/local-model fallback: authenticated Codex built-in ImageGen only.
+- Unity staging copies original audited PNG bytes without editing the active game project; independent Unity seven-category QA, visual review, Steam disclosure and Valve approval remain external.

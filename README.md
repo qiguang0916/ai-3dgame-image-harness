@@ -1,6 +1,6 @@
 # AI 3D Game Image Harness
 
-**Current development branch: v0.6 — Professional Game Asset Production.**
+**Current development branch: v0.10 — Commercial Image Batch Production (development, NOT Steam-certified).**
 
 This is a Codex/OpenAI **game image production Skill and auditable QA harness**, **not** an image generation model. The official built-in OpenAI `$imagegen` is the sole default image generation/editing backend. No API key, paid fallback, local diffusion model, or GPU inference runtime is introduced by this project.
 
@@ -210,3 +210,8 @@ production integrity audit and three real Unity Player screenshots passed.
 **No Steam commercial release is certified**: independent full game QA,
 complex KNIFE_001 visual approval, rights/provenance and relevant Steam
 review/disclosure still require evidence. See `docs/V09_ACCEPTANCE.md`.
+
+
+## v0.10 — 游戏美术批量生产与审计
+
+支持 SHA 绑定的资产配置、人审商业来源记录、任务暂停/恢复和实际 Codex 原生 ImageGen 自动化调用；不增加 API 后备或本地模型。真正原生生成并通过 provenance 审计的 PNG 才可暂存供 Unity 导入。详情见 [v0.10 开发规范](docs/V10_BATCH_PRODUCTION.md)。

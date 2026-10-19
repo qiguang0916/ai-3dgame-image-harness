@@ -10,11 +10,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-USAGE = """AI 3D Game Image Harness v0.9 (OpenAI host-native imagegen)
+USAGE = """AI 3D Game Image Harness v0.10 (native ImageGen + audited batch production)
 Usage: ai-3dgame-image-harness <command> [options]
 
 Commands:
   autopilot run|status      Bounded native Codex subscription production loop
+  batch validate|run|status|unity-stage  Audited commercial source / image batch
   doctor                    Check local deterministic QA dependencies
   validate [files...]      Validate TOML manifest/edit/QA contracts
   init <options>           Create an auditable run (execution_loop.py init)
@@ -51,8 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     if command == 'autopilot':
         from production_autopilot import main as autopilot
         return autopilot(rest)
+    if command == 'batch':
+        from batch_production import main as batch
+        return batch(rest)
     if command == "version":
-        print("ai-3dgame-image-harness 0.9.0-dev")
+        print("ai-3dgame-image-harness 0.10.0-dev")
         return 0
     if command == "doctor":
         modules={name: bool(importlib.util.find_spec(name)) for name in ("PIL", "numpy", "cv2", "skimage")}
