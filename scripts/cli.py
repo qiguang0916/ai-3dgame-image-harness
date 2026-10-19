@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-USAGE = """AI 3D Game Image Harness v0.11 (native ImageGen + v2 art contract)
+USAGE = """AI 3D Game Image Harness v0.12 (native ImageGen + exact region QA)
 Usage: ai-3dgame-image-harness <command> [options]
 
 Commands:
@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         from precision_composite import main as precision
         return precision(rest)
     if command == "version":
-        print("ai-3dgame-image-harness 0.11.0-dev")
+        print("ai-3dgame-image-harness 0.12.0-dev")
         return 0
     if command == "doctor":
         modules={name: bool(importlib.util.find_spec(name)) for name in ("PIL", "numpy", "cv2", "skimage")}
