@@ -12,7 +12,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from artifact_integrity import resolve_in_workspace, sha256_file
+from artifact_integrity import resolve_in_workspace, sha256_file, receipt_digest
 from execution_loop import _exclusive_run_lock, init_from_paths, load_run
 from production_autopilot import drive
 from production_audit import audit_run
@@ -122,6 +122,36 @@ def verify_run_binding(run, spec, root):
         run.get("input_spec_sha256") == spec["input_spec_sha256"]
     )
 
+def verify_accepted_evidence(run, spec, root):
+    """Recheck accepted receipt, pixels and QA before reporting a green job.
+
+    This is a *local integrity* check, not proof of native model origin or
+    commercial QA. Production staging still requires production_audit.
+    """
+    if not verify_run_binding(run, spec, root) or run.get("state") != "ACCEPTED":
+        return False
+    receipt, qa = run.get("current_receipt"), run.get("last_qa")
+    if not isinstance(receipt, dict) or not isinstance(qa, dict):
+        return False
+    if receipt.get("receipt_id") != receipt_digest(receipt):
+        return False
+    target = receipt.get("result")
+    if not isinstance(target, dict) or not isinstance(target.get("path"), str):
+        return False
+    image = resolve_in_workspace(root, target["path"])
+    if not image.is_file() or sha256_file(image) != receipt.get("result_sha256"):
+        return False
+    if (qa.get("status") not in {"PASS", "PASS_WITH_NOTES"}
+            or qa.get("receipt_id") != receipt["receipt_id"]
+            or qa.get("result_sha256") != receipt["result_sha256"]):
+        return False
+    required = run.get("required_hard_gates")
+    if not isinstance(required, list) or not required:
+        return False
+    gates = {g.get("name"): g.get("status") for g in qa.get("gates", []) if isinstance(g, dict)}
+    return all(gates.get(name) == "PASS" for name in required)
+
+
 def save_state(path, value, new=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
@@ -194,8 +224,8 @@ def run_batch(manifest, workspace_root, state_path, *, resume=False, max_jobs=8,
                 # In particular, missing/swapped runs must never remain green.
                 try:
                     accepted = load_run(resolve_in_workspace(root, spec["run"]))
-                    if accepted["state"] != "ACCEPTED" or not verify_run_binding(accepted, spec, root):
-                        raise ValidationError("accepted Run no longer matches the batch")
+                    if not verify_accepted_evidence(accepted, spec, root):
+                        raise ValidationError("accepted Run or output evidence changed")
                 except (OSError, ValueError, KeyError, TypeError):
                     job.update(status="ERROR", reason="accepted_run_missing_or_changed")
                     save_state(state_path, state)
@@ -213,6 +243,8 @@ def run_batch(manifest, workspace_root, state_path, *, resume=False, max_jobs=8,
                     if not verify_run_binding(previous, spec, root):
                         raise ValidationError("existing Run does not match immutable task")
                     if previous["state"] in {"ACCEPTED", "BLOCKED"}:
+                        if previous["state"] == "ACCEPTED" and not verify_accepted_evidence(previous, spec, root):
+                            raise ValidationError("prior accepted output evidence changed")
                         job["status"] = previous["state"]
                         save_state(state_path, state)
                         continue
@@ -250,8 +282,8 @@ def stage_unity(manifest, workspace_root, state_path, output_dir, codex_home=Non
         for job in plan["jobs"]:
             run_path = resolve_in_workspace(root, job["run"])
             run = load_run(run_path)
-            if not verify_run_binding(run, job, root):
-                raise ValidationError("staging Run is not bound to this batch job")
+            if not verify_accepted_evidence(run, job, root):
+                raise ValidationError("staging Run, receipt or PNG evidence invalid")
             audit = audit_run(run_path, codex_home=codex_home)
             if run["state"] != "ACCEPTED" or audit["status"] != "PASS":
                 raise ValidationError("no independent native ImageGen audit PASS")
