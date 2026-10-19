@@ -17,6 +17,7 @@ Commands:
   autopilot run|status      Bounded native Codex subscription production loop
   batch validate|run|status|unity-stage  Audited commercial source / image batch
   asset-spec inspect|scaffold|style-hash  Typed AssetSpec v2, draft starters and style SHA
+  precision-compose <options>  SHA-bound strict ROI compositing, review required
   doctor                    Check local deterministic QA dependencies
   validate [files...]      Validate TOML manifest/edit/QA contracts
   init <options>           Create an auditable run (execution_loop.py init)
@@ -59,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     if command == 'asset-spec':
         from asset_spec_v2 import main as asset_spec
         return asset_spec(rest)
+    if command == 'precision-compose':
+        from precision_composite import main as precision
+        return precision(rest)
     if command == "version":
         print("ai-3dgame-image-harness 0.11.0-dev")
         return 0
