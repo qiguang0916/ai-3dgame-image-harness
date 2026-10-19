@@ -177,5 +177,58 @@ class StrictCompositeTests(unittest.TestCase):
                 self.composite(root,c,src,edited,report="master.png")
 
 
+    def test_complete_cli_and_contract_binding(self):
+        import contextlib
+        import io
+        from PIL import Image
+        from artifact_integrity import canonical_json_bytes, sha256_bytes
+        import test_v06_integration as fixtures
+        import cli
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            asset, edit, run_file, _ = fixtures.V06IntegrationTests()._init(root)
+            reference = root / "master.png"
+            generated = root / "generated.png"
+            with Image.open(reference) as image:
+                altered = image.copy()
+            altered.putpixel((2, 2), (10, 120, 225))
+            altered.save(generated)
+            protected = Image.new("L", (40, 40), 0)
+            protected.putpixel((4, 4), 255)
+            mask = root / "protect.png"
+            protected.save(mask)
+            edit.write_text(edit.read_text() + (
+                "\n[region_contract.strict_mask]\n"
+                'path = "protect.png"\n'
+                f'sha256 = "{sha256_file(mask)}"\n'
+                f'reference_sha256 = "{sha256_file(reference)}"\n'
+            ))
+            output, report = root / "merged.png", root / "merged-report.json"
+            args = ["precision-compose", "--workspace-root", str(root),
+                    "--edit", str(edit), "--reference", str(reference),
+                    "--candidate", str(generated), "--output", str(output),
+                    "--report", str(report)]
+            with contextlib.redirect_stdout(io.StringIO()) as capture:
+                exit_code = cli.main(args)
+            self.assertEqual(exit_code, 0)
+            result = json.loads(capture.getvalue())
+            self.assertEqual(result["state"], "CANDIDATE_NEEDS_VISUAL_REVIEW")
+            self.assertTrue(result["visual_seam_review_required"])
+            from validate_project import load_document
+            spec = load_document(edit).data["region_contract"]
+            self.assertEqual(result["contract_sha256"],
+                             sha256_bytes(canonical_json_bytes(spec)))
+            self.assertEqual(result["output_sha256"], sha256_file(output))
+            self.assertEqual(result["outside_target_pixel_mismatches"], 0)
+            self.assertEqual(result["protected_pixel_mismatches"], 0)
+            self.assertEqual(compare_images(reference, output, spec)["status"], "PASS")
+            first_sha = sha256_file(output)
+            with contextlib.redirect_stdout(io.StringIO()) as error:
+                repeated = cli.main(args)
+            self.assertEqual(repeated, 2)
+            self.assertEqual(json.loads(error.getvalue())["state"], "BLOCKED")
+            self.assertEqual(sha256_file(output), first_sha)
+
+
 if __name__=="__main__":
     unittest.main()
