@@ -113,14 +113,31 @@ def make_plan(manifest_path, root):
     }
 
 def verify_run_binding(run, spec, root):
-    """Reject stale or swapped Run state before reusing/staging it."""
-    return (
+    """Bind a Run to its job directory as well as its source contract.
+
+    Two jobs may intentionally share the same asset/edit TOML. Their resulting
+    receipts still cannot be swapped across job IDs or production directories.
+    """
+    if not (
         run.get("auditable") is True and
         run.get("workspace_root") == str(root) and
         run.get("asset_document_path") == spec["asset"] and
         run.get("edit_document_path") == spec["edit"] and
         run.get("input_spec_sha256") == spec["input_spec_sha256"]
-    )
+    ):
+        return False
+    receipt = run.get("current_receipt")
+    if receipt is None:
+        return True  # The first image action has not produced a result yet.
+    try:
+        if not isinstance(receipt, dict) or not isinstance(receipt.get("result"), dict):
+            return False
+        job = resolve_in_workspace(root, spec["run"])
+        evidence = job.with_name(job.name + ".production")
+        output = resolve_in_workspace(root, receipt["result"]["path"])
+        return output.is_relative_to(evidence)
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
 
 def verify_accepted_evidence(run, spec, root):
     """Recheck accepted receipt, pixels and QA before reporting a green job.
