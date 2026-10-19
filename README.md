@@ -224,3 +224,8 @@ review/disclosure still require evidence. See `docs/V09_ACCEPTANCE.md`.
 - [v1.0 验收矩阵、真实生产基准、负面测试](docs/V1_ACCEPTANCE_AND_TEST_MATRIX.md)：六层证据、真实 ImageGen 样本、Unity Player 和 Steam 发布门禁。
 
 **注意：**上述文件是未来实施契约；截至 v0.10.0-dev 的已验证能力见 [v0.10 验收记录](docs/V10_ACCEPTANCE.md)。现有真实模型多资产生产、Unity 游戏同提交七类 QA、最终美术/版权审核和 Steam 外部审查仍未完成。
+
+
+## v0.10.1 — Reliability hardening (code verified)
+
+State snapshots use atomic replacement; accepted batch runs and CLI status recheck their current source, SHA-bound receipt/PNG/QA, and job-specific evidence location. Orphan/native-host evidence blocks unsafe restarts. **189/189 tests passed locally; no new v0.10.1 real ImageGen throughput or Unity Player release proof is claimed.** See [v0.10.1 acceptance](docs/V101_ACCEPTANCE.md). Remaining staged work continues in [v1 development plan](docs/V1_DEVELOPMENT_ROADMAP.md).
