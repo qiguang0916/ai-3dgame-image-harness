@@ -230,5 +230,18 @@ class StrictCompositeTests(unittest.TestCase):
             self.assertEqual(sha256_file(output), first_sha)
 
 
+    def test_seam_gradient_metric_exposes_edge_risk_without_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            src, generated, mask, contract = self.fixture(root)
+            qa = self.composite(root, contract, src, generated)
+            self.assertGreater(qa["seam_crossing_pairs"], 0)
+            self.assertGreater(qa["seam_excess_max_channel_jump"], 0)
+            self.assertGreater(qa["seam_excess_mean_channel_jump"], 0)
+            self.assertTrue(qa["visual_seam_review_required"])
+            self.assertEqual(qa["state"], "CANDIDATE_NEEDS_VISUAL_REVIEW")
+            self.assertFalse(qa["steam_approved"])
+
+
 if __name__=="__main__":
     unittest.main()
