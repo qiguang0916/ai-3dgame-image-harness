@@ -15,7 +15,7 @@ In v0.9 real ImageGen edits, LAMP_001 and RADIO_001 had measured changes outside
 - Mode must be `enforce`, with real, bounded `[[region_contract.targets]]`. Existing v0.6/v0.11 contracts without `strict_mask` remain compatible.
 - Any output path collision or pre-existing output/report refuses overwrite. An interrupted output requires **manual reconciliation** before retrying.
 - The compositor does not invoke Codex/ImageGen/API, auto-promote a Master, or set any QA approval flag.
-- Pixel equality outside edit boundaries is objective; visible seam quality, lighting response, shape consistency, material authenticity and game-scale readability require **independent visual review**. Recorded boundary pixel change counts are diagnostic data, **not a seam PASS**.
+- Pixel equality outside edit boundaries is objective; visible seam quality, lighting response, shape consistency, material authenticity and game-scale readability require **independent visual review**. Diagnostic seam measurements count adjacent pixel pairs crossing ROI/mask boundaries and measure **extra maximum-channel gradient jumps relative to the approved original**; these measurements are risk indicators, **never a seam PASS**.
 
 ## Input schema
 
@@ -51,7 +51,7 @@ The mask is a separate *protection* contract, not an implicit segmentation predi
   --report /absolute/workspace/qa/strict-v001.json
 ```
 
-Report state: **`CANDIDATE_NEEDS_VISUAL_REVIEW`** with complete ROI contract SHA plus source/candidate/mask/output SHA, target pixel changes, outside mismatch count (must be zero), protected mismatch count (must be zero), measured boundary changes and explicit `visual_seam_review_required=true`. `commercial_release_certified=false` and `steam_approved=false`.
+Report state: **`CANDIDATE_NEEDS_VISUAL_REVIEW`** with complete ROI contract SHA plus source/candidate/mask/output SHA, target pixel changes, outside mismatch count (must be zero), protected mismatch count (must be zero), measured boundary changes and seam crossing/excess gradient metrics plus explicit `visual_seam_review_required=true`. `commercial_release_certified=false` and `steam_approved=false`.
 
 Candidate provenance is a **separate gate**: for real production use, verify the input candidate came from an auditable native ImageGen Run with `production-audit`; a locally constructed image by itself is not native image origin proof. Do not stage into Unity or Steam before independent QA, approved source rights and appropriate runtime tests.
 
@@ -65,7 +65,7 @@ Candidate provenance is a **separate gate**: for real production use, verify the
 
 - Branch: `feat/v0.12-precision-region`, base: v0.11 code + successful independent native ImageGen smoke.
 - GitHub PR: [#11](https://github.com/qiguang0916/ai-3dgame-image-harness/pull/11), retained as Draft until real-image seam QA.
-- GitHub Actions run [39261468001](https://github.com/qiguang0916/ai-3dgame-image-harness/actions/runs/39261468001): **SUCCESS**. 224 Python tests PASS; schema validation PASS; legacy host-protocol dry-run PASS.
+- GitHub Actions run [39261468001](https://github.com/qiguang0916/ai-3dgame-image-harness/actions/runs/39261468001): **SUCCESS**. 224 Python tests PASS at the CLI integrity milestone; subsequent seam-metric tests must receive their own CI verification; schema validation PASS; legacy host-protocol dry-run PASS.
 - CLI-level regression explicitly tests full valid TOML, SHA-bound ROI report, no overwrite on repeated invocation, and compatibility with v0.6 edit manifests.
 - The original Mac worktree branch also contained a local first implementation and 11 passing tests before its Desktop Commander monthly tool quota was exhausted. Remote GitHub edits were then applied to the remote branch. **Mac worktree has not been synchronized to this remote branch since that quota block**; preserve its uncommitted code when eventually reconciling.
 - No real historical LAMP/RADIO PNG A/B was executed in this phase because the private Mac files were no longer reachable. Reports of numerical 0 outside-target mismatches refer to synthetic fixture tests, not a passed visual fidelity benchmark. Do not fabricate private evidence or mark C09 complete.
