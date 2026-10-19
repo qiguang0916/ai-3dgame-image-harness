@@ -16,7 +16,7 @@ from artifact_integrity import resolve_in_workspace, sha256_file, receipt_digest
 from execution_loop import _exclusive_run_lock, init_from_paths, load_run
 from production_autopilot import drive
 from production_audit import audit_run
-from validate_project import ValidationError
+from validate_project import ValidationError, load_document
 
 ID = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,47}\Z")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -85,6 +85,9 @@ def make_plan(manifest_path, root):
             or not ID.fullmatch(batch_id) or not isinstance(jobs, list)
             or not 1 <= len(jobs) <= 128):
         raise ValidationError("invalid batch contract")
+    style_pin = manifest.get("style_kit_sha256")
+    if style_pin is not None and (not isinstance(style_pin, str) or not SHA.fullmatch(style_pin)):
+        raise ValidationError("batch style_kit_sha256 must be lowercase 64-digit SHA256")
     seen, prepared = set(), []
     for job in jobs:
         if not isinstance(job, dict):
@@ -96,6 +99,13 @@ def make_plan(manifest_path, root):
         asset = bound_file(root, job.get("asset"), ".toml")
         edit = bound_file(root, job.get("edit"), ".toml")
         rights = reviewed_rights(root, job.get("rights"))
+        if style_pin is not None:
+            # Explicit batch Style Kit locks all jobs to the same exact art
+            # direction. Opt-in only: legacy v0.10 batches stay unchanged.
+            edit_data = load_document(edit).data
+            kit = (edit_data.get("asset_spec_v2") or {}).get("style_kit") or {}
+            if kit.get("sha256") != style_pin:
+                raise ValidationError("batch style kit SHA missing or inconsistent across assets")
         preflight = init_from_paths(asset, edit, workspace_root=root)
         prepared.append({
             "id": ident, "asset": str(asset.relative_to(root)),
@@ -106,11 +116,14 @@ def make_plan(manifest_path, root):
             "input_spec_sha256": preflight.get("input_spec_sha256"),
             "run": f".ai-3dgame-image-harness/batches/{batch_id}/jobs/{ident}.json",
         })
-    return {
+    plan = {
         "schema_version": 1, "batch_id": batch_id, "workspace_root": str(root),
         "manifest": str(source.relative_to(root)), "manifest_sha256": sha256_file(source),
         "jobs": prepared,
     }
+    if style_pin is not None:
+        plan["style_kit_sha256"] = style_pin
+    return plan
 
 def verify_run_binding(run, spec, root):
     """Bind a Run to its job directory as well as its source contract.
@@ -320,6 +333,13 @@ def stage_unity(manifest, workspace_root, state_path, output_dir, codex_home=Non
             raise ValidationError("output already exists or assets not all ACCEPTED")
         ready = []
         for job in plan["jobs"]:
+            # AssetSpec v2 distinguishes image generation from intended game use.
+            # Never mislabel concept references or Steam marketing art as an
+            # in-game 2D Unity texture merely because the Host QA accepted it.
+            edit_data = load_document(resolve_in_workspace(root, job["edit"])).data
+            typed = edit_data.get("asset_spec_v2")
+            if typed and typed.get("intended_use") != "ingame":
+                raise ValidationError("reference/marketing asset cannot be staged as Unity in-game art")
             run_path = resolve_in_workspace(root, job["run"])
             run = load_run(run_path)
             if not verify_accepted_evidence(run, job, root):

@@ -106,6 +106,9 @@ def compile_repair_brief(
     if edit.get("prompt_intelligence"):
         from prompt_control import repair_authority_guidance
         lines.extend(["", repair_authority_guidance(asset, edit)])
+    if edit.get("asset_spec_v2"):
+        from asset_spec_v2 import repair_guard
+        lines.extend(["", repair_guard(edit)])
 
     lines.extend(["", "HARD PRESERVE:"])
     lines.extend(f"- {item}" for item in hard_preserve)

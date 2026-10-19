@@ -180,6 +180,10 @@ def compile_brief(asset: dict[str, Any], edit: dict[str, Any]) -> str:
         from prompt_control import format_prompt_intelligence
         lines.extend(["", format_prompt_intelligence(asset, edit)])
 
+    if edit.get("asset_spec_v2"):
+        from asset_spec_v2 import format_brief
+        lines.extend(["", format_brief(asset, edit)])
+
     if provisional_fields:
         lines.extend(["", "PROVISIONAL / UNKNOWN FIELDS:"])
         lines.extend(f"- {item}" for item in provisional_fields)

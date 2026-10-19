@@ -343,6 +343,8 @@ def validate_edit_request(data: dict[str, Any], path: Path) -> None:
     validate_art_and_output(data, where)
     from prompt_control import validate_prompt_control_schema
     validate_prompt_control_schema(data, where)
+    from asset_spec_v2 import validate_schema as validate_v2_asset_spec
+    validate_v2_asset_spec(data, where)
 
     bindings = data.get("reference_bindings", [])
     if operation != "create" and not bindings:
@@ -565,6 +567,8 @@ def cross_validate(documents: list[LoadedDocument]) -> None:
 
         from prompt_control import validate_prompt_control_bindings
         validate_prompt_control_bindings(asset, data, str(doc.path))
+        from asset_spec_v2 import validate_bindings as validate_v2_bindings
+        validate_v2_bindings(asset, data, str(doc.path))
 
         operation = data["operation"]
         if operation in OPERATIONS_REQUIRING_BASE_EDIT_TARGET:

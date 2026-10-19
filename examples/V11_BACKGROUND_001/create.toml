@@ -1,0 +1,36 @@
+document_type = "edit_request"
+schema_version = 1
+request_id = "EXAMPLE_BG_001_CREATE"
+asset_id = "EXAMPLE_BG_001"
+operation = "create"
+target = "New original background game image candidate"
+change = "Create only the declared original background image; no unrelated elements."
+
+[preserve]
+hard = []
+soft = []
+
+[output]
+purpose = "background"
+expected_size = "1920x1080"
+require_transparency = false
+
+[asset_spec_v2]
+contract_version = 2
+category = "background"
+intended_use = "ingame"
+expected_size = "1920x1080"
+alpha_mode = "forbidden"
+color_space = "srgb"
+quality_tier = "draft"
+required_roles = []
+
+[asset_spec_v2.style_kit]
+id = "game_art_original_v1"
+palette = ["#B8AAA0", "#46545E", "#FAFAF7"]
+lighting = "Softbox lighting, low distraction, game-scale readable shapes"
+materials = ["believable restrained surfaces", "clear material boundaries"]
+edge_language = "No halos or unrelated outlines around the subject"
+negative_constraints = ["no irrelevant props or invented hidden geometry", "no fake UI or unintended text overlays"]
+game_scale_read = "Readable at the final in-game display size"
+sha256 = "6ac557c13042686d9b1c2021b8ba7469540889f94d1b2d106acc56a6637f1e59"

@@ -106,3 +106,14 @@ If adding a contract field, reason code, or state transition, update validator/s
 - Never rerun ambiguous/partial Host calls or overwrite accepted work. Bound job and action counts, maintain immutable batch plan and sources across resumes.
 - No API/local-model fallback: authenticated Codex built-in ImageGen only.
 - Unity staging copies original audited PNG bytes without editing the active game project; independent Unity seven-category QA, visual review, Steam disclosure and Valve approval remain external.
+
+
+## v0.11 optional AssetSpec v2
+
+- Old schema_version=1 asset/edit TOMLs and packets remain unchanged unless edit.asset_spec_v2 is explicitly present.
+- V2 categories have typed use/size/alpha/colorspace; image generation does NOT automatically satisfy the technical output or art/QA gates.
+- Duplicate approved reference roles must resolve to one specific selected authoritative Master; Style Kit text may not override identity/geometry/camera/hard-preserve locks or invent unseen components.
+- Style Kit canonical SHA binds the project palette and art direction; changing it after a Run begins requires a fresh Run, never a silent resume.
+- A concept reference or Steam marketing image is not an in-game Unity 2D asset; Unity staging rejects v2 intended_use != ingame.
+- Asset scaffold output is draft TOML with no ImageGen provenance, no rights signoff, and no Steam/Unity acceptance.
+- An explicitly pinned batch.style_kit_sha256 is a fail-closed cross-job contract; no v2 kit or mismatched SHA must block before the first native Host image action.
