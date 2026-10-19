@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 
 import execution_loop as loop
-from artifact_integrity import resolve_in_workspace, receipt_digest
+from artifact_integrity import (canonical_json_bytes, resolve_in_workspace, receipt_digest,
+                                sha256_bytes, workspace_relative)
 from native_codex_host import NativeCodexHost, validate_critic
 from next_action import build_from_paths
-from validate_project import ValidationError
+from validate_project import ValidationError, load_document
 
 
 def write_new(path, data):
@@ -41,18 +42,33 @@ def drive(asset, edit, workspace_root, run_path, *, resume=False, max_actions=8,
         raise ValidationError('max-actions must be 1..100')
     # Separate orchestration lock spans subprocesses; state-machine locks stay short.
     with loop._exclusive_run_lock(run_path.with_name(run_path.name + '.autopilot')):
+        evidence_dir = resolve_in_workspace(root, run_path.with_name(run_path.name + '.production'))
+        if run_path.is_symlink():
+            raise ValidationError('run state symlink requires manual reconciliation')
         if run_path.exists():
             if not resume:
                 raise ValidationError('existing run requires --resume')
             run = loop.load_run(run_path)
             if Path(run['workspace_root']).resolve() != root or not run.get('auditable'):
                 raise ValidationError('resume requires same auditable workspace')
+            # Validate the *current invocation* even when already ACCEPTED;
+            # otherwise a different asset/edit pair could inherit a green run.
+            if (run.get('asset_document_path') != workspace_relative(root, asset)
+                    or run.get('edit_document_path') != workspace_relative(root, edit)):
+                raise ValidationError('resume asset/edit path differs from original Run')
+            spec_sha = {
+                'asset': sha256_bytes(canonical_json_bytes(load_document(Path(asset)).data)),
+                'edit': sha256_bytes(canonical_json_bytes(load_document(Path(edit)).data)),
+            }
+            if run.get('input_spec_sha256') != spec_sha:
+                raise ValidationError('resume asset/edit specification changed')
         else:
             if resume:
                 raise ValidationError('cannot resume missing run')
+            if evidence_dir.exists() or evidence_dir.is_symlink():
+                raise ValidationError('orphan native Host evidence requires manual reconciliation')
             run = loop.init_from_paths(asset, edit, workspace_root=root)
             loop.save_run(run_path, run)
-        evidence_dir = resolve_in_workspace(root, run_path.with_name(run_path.name + '.production'))
         host = host or NativeCodexHost()
         for _ in range(max_actions):
             if run['state'] in {'ACCEPTED', 'BLOCKED'}:
