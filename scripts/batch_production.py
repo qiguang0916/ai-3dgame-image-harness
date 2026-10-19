@@ -195,6 +195,29 @@ def summarize(value):
         "steam_approved": False, "commercial_release_certified": False,
     }
 
+def checked_status(state_path):
+    """Report status only after revalidating original plan and accepted bytes.
+
+    This path is intentionally read-only: it may refuse a stale success but
+    never modifies a journal or invokes an image model.
+    """
+    source = Path(state_path).expanduser().resolve()
+    snapshot = read_json(source)
+    stored = snapshot.get("plan")
+    if not isinstance(stored, dict) or not isinstance(snapshot.get("jobs"), list):
+        raise ValidationError("invalid batch status file")
+    root = Path(stored["workspace_root"]).expanduser().resolve()
+    resolve_in_workspace(root, source)
+    plan = make_plan(stored["manifest"], root)
+    state = load_state(source, plan)
+    for spec, job in zip(plan["jobs"], state["jobs"]):
+        if job["status"] == "ACCEPTED":
+            accepted = load_run(resolve_in_workspace(root, spec["run"]))
+            if not verify_accepted_evidence(accepted, spec, root):
+                raise ValidationError("accepted batch integrity changed")
+    return summarize(state)
+
+
 def run_batch(manifest, workspace_root, state_path, *, resume=False, max_jobs=8, max_actions=8, host=None):
     root = Path(workspace_root).expanduser().resolve()
     state_path = resolve_in_workspace(root, state_path)
@@ -360,10 +383,7 @@ def main(argv=None):
             rc = 0 if result["state"] == "ASSETS_ACCEPTED_NOT_STEAM_CERTIFIED" else (
                 2 if result["state"] == "BLOCKED" else 3)
         elif args.action == "status":
-            state = read_json(args.state)
-            if not isinstance(state.get("plan"), dict) or not isinstance(state.get("jobs"), list):
-                raise ValidationError("invalid status file")
-            result, rc = summarize(state), 0
+            result, rc = checked_status(args.state), 0
         else:
             result = stage_unity(args.manifest, args.workspace_root, args.state,
                                  args.output_dir, codex_home=args.codex_home)
