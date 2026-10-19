@@ -97,6 +97,23 @@ def validate_region_contract(edit: dict[str, Any], where: str) -> None:
         if area >= .95:
             raise ValidationError(f"{where}: editable target coverage is too broad to enforce preservation")
 
+    strict = contract.get("strict_mask")
+    if strict is not None:
+        if contract["mode"] != "enforce" or not targets:
+            raise ValidationError(f"{where}: strict_mask requires enforce mode and targets")
+        if not isinstance(strict, dict) or set(strict) != {"path", "sha256", "reference_sha256"}:
+            raise ValidationError(f"{where}: strict_mask requires path plus two SHA-256 digests")
+        raw = strict["path"]
+        if (not isinstance(raw, str) or not raw.strip() or
+                Path(raw).is_absolute() or ".." in Path(raw).parts or
+                Path(raw).suffix.lower() != ".png"):
+            raise ValidationError(f"{where}: strict_mask.path must be workspace-relative PNG")
+        import re
+        for field in ("sha256", "reference_sha256"):
+            value = strict[field]
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+                raise ValidationError(f"{where}: strict_mask.{field} must be SHA-256")
+
 
 def _pixel_rect(bbox: list[float], width: int, height: int) -> tuple[int, int, int, int]:
     x0,y0,x1,y1 = bbox
