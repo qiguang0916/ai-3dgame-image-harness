@@ -175,14 +175,32 @@ def run_batch(manifest, workspace_root, state_path, *, resume=False, max_jobs=8,
         if resume:
             state = load_state(state_path, plan)
         else:
-            if state_path.exists():
+            if state_path.exists() or state_path.is_symlink():
                 raise ValidationError("existing batch requires --resume")
+            # A missing batch pointer is NOT evidence that earlier model calls
+            # never ran. Never recreate it over orphan runs or host events.
+            for spec in plan["jobs"]:
+                orphan = resolve_in_workspace(root, spec["run"])
+                evidence = orphan.with_name(orphan.name + ".production")
+                if orphan.exists() or orphan.is_symlink() or evidence.exists() or evidence.is_symlink():
+                    raise ValidationError("orphan batch Run/Host evidence requires manual reconciliation")
             state = {"schema_version": 1, "plan": plan,
                      "jobs": [{"id": j["id"], "status": "PENDING"} for j in plan["jobs"]]}
             save_state(state_path, state, new=True)
         invoked = 0
         for spec, job in zip(plan["jobs"], state["jobs"]):
-            if invoked >= max_jobs or job["status"] in {"ACCEPTED", "BLOCKED", "ERROR"}:
+            if job["status"] == "ACCEPTED":
+                # A stale ACCEPTED row is only a journal pointer, not proof.
+                # In particular, missing/swapped runs must never remain green.
+                try:
+                    accepted = load_run(resolve_in_workspace(root, spec["run"]))
+                    if accepted["state"] != "ACCEPTED" or not verify_run_binding(accepted, spec, root):
+                        raise ValidationError("accepted Run no longer matches the batch")
+                except (OSError, ValueError, KeyError, TypeError):
+                    job.update(status="ERROR", reason="accepted_run_missing_or_changed")
+                    save_state(state_path, state)
+                continue
+            if invoked >= max_jobs or job["status"] in {"BLOCKED", "ERROR"}:
                 continue
             if spec["preflight"] == "BLOCKED":
                 job.update(status="BLOCKED", reason=spec["preflight_reason"])
