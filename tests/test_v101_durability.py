@@ -1,6 +1,8 @@
 """v0.10.1 fault-injection regressions; all Hosts here are synthetic fixtures."""
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 from pathlib import Path
 import shutil
@@ -151,6 +153,24 @@ class DurabilityTests(unittest.TestCase):
             result = batch.run_batch(manifest, root, state, resume=True, host=followup)
             self.assertEqual(result["counts"]["ERROR"], 1)
             self.assertEqual(followup.actions, [])
+
+
+    def test_status_cli_does_not_report_invalid_accepted_run_as_success(self):
+        for failure in ("missing_png", "changed_rights"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                manifest, state, host, rights = self.fixture(root)
+                batch.run_batch(manifest, root, state, host=host)
+                if failure == "missing_png":
+                    run_path = root / batch.make_plan(manifest, root)["jobs"][0]["run"]
+                    accepted = json.loads(run_path.read_text())
+                    (root / accepted["current_receipt"]["result"]["path"]).unlink()
+                else:
+                    rights.write_text("changed source rights")
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    rc = batch.main(["status", "--state", str(state)])
+                self.assertEqual(rc, 2)
+                self.assertEqual(json.loads(output.getvalue())["state"], "ERROR")
 
 if __name__ == "__main__":
     unittest.main()
