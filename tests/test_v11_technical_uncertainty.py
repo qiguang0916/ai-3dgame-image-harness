@@ -6,6 +6,9 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import json
+import subprocess
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +54,85 @@ class TechnicalUncertaintyTests(unittest.TestCase):
                 verify_output_gate({"expected_size": "64x32"}, image, "SKIPPED")
             with self.assertRaises(ValidationError):
                 verify_output_gate({"expected_size": "64x32"}, image, "NOT_CHECKED")
+
+
+    def test_readonly_critic_receives_digest_bound_technical_preflight(self):
+        from artifact_integrity import packet_digest
+        from native_codex_host import NativeCodexHost
+        from next_action import build_from_paths
+        from test_v09_autopilot import StubHost
+        import production_autopilot
+        for expected, verdict in (("40x40", "PASS"), ("32x32", "FAIL")):
+            with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                asset, edit, run_file, _ = baseline.V06IntegrationTests()._init(root, tech=True)
+                host = StubHost((root / "master.png").read_bytes())
+                step = production_autopilot.drive(asset, edit, root, run_file,
+                                                  resume=True, max_actions=1, host=host)
+                self.assertEqual(step["state"], "QA_PENDING")
+                packet = build_from_paths(asset, edit, run_file)
+                packet["technical_output"]["expected_size"] = expected
+                packet["packet_id"] = packet_digest(packet)
+                seen = []
+                def fake_run(argv, **kw):
+                    if argv[1:] == ["login", "status"]:
+                        return subprocess.CompletedProcess(argv, 0, b"Logged in using ChatGPT", b"")
+                    prompt = kw["input"].decode("utf-8")
+                    seen.append(prompt)
+                    self.assertEqual(argv[argv.index("-s")+1], "read-only")
+                    stage = Path(argv[argv.index("-C")+1])
+                    self.assertIn("input-0.png", [x.name for x in stage.glob("input-*.png")])
+                    output = Path(argv[argv.index("-o")+1])
+                    gates = [
+                        {"name": gate, "status": verdict if gate == "image.technical_output" else "PASS",
+                         "note": "Controlled synthetic pixels and observable shape",
+                         "inspection_method": "Synthetic fixture actual pixel comparison",
+                         "observation": "Unique fixture pixel evidence for " + gate}
+                        for gate in packet["required_hard_gates"]
+                    ]
+                    qa = {"status": "PASS" if verdict=="PASS" else "BLOCKED",
+                          "summary":"Synthetic controlled fixture independent QA",
+                          "repair_directives":[], "gates":gates}
+                    output.write_text(json.dumps(qa))
+                    return subprocess.CompletedProcess(argv, 0, b'{"type":"turn.completed"}\n', b"")
+                with patch("native_codex_host.subprocess.run", side_effect=fake_run):
+                    answer, evidence, transcript = NativeCodexHost("/fake/codex").execute(packet, reviewer=True)
+                self.assertEqual(answer["status"], "PASS" if verdict=="PASS" else "BLOCKED")
+                self.assertEqual(evidence["technical_precheck"]["status"], verdict)
+                self.assertIn("DIGEST-BOUND TECHNICAL IMAGE MEASUREMENT", seen[0])
+                self.assertIn(f"status={verdict}", seen[0])
+                self.assertIn(packet["result_binding"]["sha256"], seen[0])
+
+    def test_critic_may_not_report_technical_pass_against_measured_failure(self):
+        from artifact_integrity import packet_digest
+        from native_codex_host import NativeCodexHost
+        from next_action import build_from_paths
+        from test_v09_autopilot import StubHost
+        import production_autopilot
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            asset, edit, run_file, _ = baseline.V06IntegrationTests()._init(root, tech=True)
+            production_autopilot.drive(asset, edit, root, run_file, resume=True,
+                                       max_actions=1, host=StubHost((root / "master.png").read_bytes()))
+            packet = build_from_paths(asset, edit, run_file)
+            packet["technical_output"]["expected_size"] = "800x800"
+            packet["packet_id"] = packet_digest(packet)
+            def fake_run(argv, **kw):
+                if argv[1:] == ["login", "status"]:
+                    return subprocess.CompletedProcess(argv, 0, b"Logged in using ChatGPT", b"")
+                gates = [
+                    {"name": name, "status": "PASS", "note":"Synthetic deliberate false approval",
+                     "inspection_method":"Mocked controlled image inspection",
+                     "observation":"Synthetic per-gate evidence for "+name}
+                    for name in packet["required_hard_gates"]
+                ]
+                Path(argv[argv.index("-o")+1]).write_text(json.dumps({
+                    "status":"PASS", "summary":"False critic approval in synthetic test",
+                    "repair_directives":[], "gates": gates}))
+                return subprocess.CompletedProcess(argv, 0, b"{}\n", b"")
+            with patch("native_codex_host.subprocess.run", side_effect=fake_run):
+                with self.assertRaises(ValidationError):
+                    NativeCodexHost("/fake/codex").execute(packet, reviewer=True)
 
 
 if __name__ == "__main__":
