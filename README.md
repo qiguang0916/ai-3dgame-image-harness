@@ -215,3 +215,12 @@ review/disclosure still require evidence. See `docs/V09_ACCEPTANCE.md`.
 ## v0.10 — 游戏美术批量生产与审计
 
 支持 SHA 绑定的资产配置、人审商业来源记录、任务暂停/恢复和实际 Codex 原生 ImageGen 自动化调用；不增加 API 后备或本地模型。真正原生生成并通过 provenance 审计的 PNG 才可暂存供 Unity 导入。详情见 [v0.10 开发规范](docs/V10_BATCH_PRODUCTION.md)。
+
+
+## v0.10 → v1.0 后续完整开发规范（设计完成，功能待实施）
+
+- [v1.0 产品目标和总体技术架构](docs/V1_PRODUCT_AND_ARCHITECTURE.md)：范围、模块责任、证据链、ImageGen/Unity/Steam 契约。
+- [v0.10 → v1.0 完整开发计划与 Codex 任务](docs/V1_DEVELOPMENT_ROADMAP.md)：v0.10.1、v0.11–v0.15、v1.0 RC，共 58 项可执行任务及退出条件。
+- [v1.0 验收矩阵、真实生产基准、负面测试](docs/V1_ACCEPTANCE_AND_TEST_MATRIX.md)：六层证据、真实 ImageGen 样本、Unity Player 和 Steam 发布门禁。
+
+**注意：**上述文件是未来实施契约；截至 v0.10.0-dev 的已验证能力见 [v0.10 验收记录](docs/V10_ACCEPTANCE.md)。现有真实模型多资产生产、Unity 游戏同提交七类 QA、最终美术/版权审核和 Steam 外部审查仍未完成。
