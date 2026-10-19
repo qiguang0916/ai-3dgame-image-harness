@@ -207,6 +207,13 @@ def expected_hard_gates(
     if "expected_size" in output or "require_transparency" in output:
         if "image.technical_output" not in seen:
             result.append("image.technical_output")
+    spec_v2 = edit.get("asset_spec_v2")
+    if spec_v2:
+        for gate in ("art_v2.category_intent", "art_v2.style_consistency"):
+            if gate == "art_v2.style_consistency" and not spec_v2.get("style_kit"):
+                continue
+            if gate not in seen and gate not in result:
+                result.append(gate)
     return result
 
 

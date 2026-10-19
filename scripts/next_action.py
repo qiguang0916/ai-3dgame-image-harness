@@ -223,6 +223,9 @@ def build_action_packet(
         "budget": _budget_packet(run),
     }
 
+    if edit.get("asset_spec_v2"):
+        from asset_spec_v2 import packet_contract
+        packet["asset_spec_v2"] = packet_contract(asset, edit)
     if edit.get("prompt_intelligence"):
         from prompt_control import resolve_role_authority
         packet["prompt_intelligence"] = {

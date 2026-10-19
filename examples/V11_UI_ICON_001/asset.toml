@@ -1,0 +1,13 @@
+document_type = "asset_manifest"
+schema_version = 1
+asset_id = "EXAMPLE_ICON_001"
+asset_type = "ui_icon"
+status = "bootstrap"
+
+[locks]
+hard = ["declared visible object identity"]
+soft = ["lighting softness"]
+
+[qa]
+max_repair_passes = 2
+max_regeneration_passes = 1

@@ -154,6 +154,19 @@ class NativeCodexHost:
                 shutil.copyfile(source, target)
                 originals.append((source, target, binding['sha256']))
                 images.append(target)
+            technical_precheck = None
+            if reviewer and 'image.technical_output' in packet.get('required_hard_gates', []):
+                from asset_report import inspect_output
+                output_spec = packet.get('technical_output')
+                if not isinstance(output_spec, dict) or not (
+                    {'expected_size', 'require_transparency'} & set(output_spec)
+                ):
+                    raise ValidationError('critic technical gate has no bound output contract')
+                # Last input is the SHA-matched candidate image. This result
+                # comes from deterministic decoded pixels, not a Host claim.
+                technical_precheck = inspect_output(images[-1], output_spec)
+                if technical_precheck['sha256'] != packet['result_binding']['sha256']:
+                    raise ValidationError('technical precheck image not bound to receipt result')
             (stage / 'packet.json').write_text(json.dumps(packet), encoding='utf-8')
             staged_packet_sha = sha256_file(stage / 'packet.json')
             final = stage / 'final.json'
@@ -173,6 +186,21 @@ class NativeCodexHost:
                           'note,inspection_method,observation: distinct concrete pixel evidence. '
                           'Status PASS/PASS_WITH_NOTES/REPAIR_MINOR/REGENERATE_MAJOR/BLOCKED. '
                           'Unverifiable gates cannot PASS. No human, rights, or Steam approval claims.')
+                if technical_precheck is not None:
+                    prompt += (
+                        ' DIGEST-BOUND TECHNICAL IMAGE MEASUREMENT from local verified '
+                        'Pillow pixels (NOT a user assertion, NOT an artistic judgment): '
+                        f"result_sha256={technical_precheck['sha256']} "
+                        f"status={technical_precheck['status']} "
+                        f"width={technical_precheck['width']} height={technical_precheck['height']} "
+                        f"has_transparency={technical_precheck['has_transparency']} "
+                        f"failures={json.dumps(technical_precheck['failures'])}. "
+                        'For image.technical_output use the measured status PASS/FAIL, '
+                        'citing this verified SHA and measurement method. '
+                        'A technical PASS does NOT certify subjective geometry, style, '
+                        'license, rights or any other gate. Inspect other visual gates '
+                        'independently; mark NOT_VERIFIABLE when actual pixels unavailable.'
+                    )
             else:
                 prompt = ('Read packet.json; follow its prompt, delta and bindings. Attached input-N.png '
                           'correspond to input_bindings in order. Invoke built-in native image_gen.imagegen '
@@ -193,7 +221,21 @@ class NativeCodexHost:
             if reviewer:
                 if image_tool_calls(transcript):
                     raise ValidationError('critic invoked image tool')
-                return validate_critic(json.loads(final.read_text()), packet['required_hard_gates']), evidence, transcript
+                answer = validate_critic(json.loads(final.read_text()),
+                                         packet['required_hard_gates'])
+                if technical_precheck is not None:
+                    actual = next((gate for gate in answer['gates']
+                                   if gate['name'] == 'image.technical_output'), None)
+                    if actual is None or (
+                        actual['status'] == 'PASS' and technical_precheck['status'] != 'PASS'
+                    ):
+                        raise ValidationError('critic technical PASS conflicts with actual pixels')
+                    evidence['technical_precheck'] = {
+                        key: technical_precheck[key]
+                        for key in ('sha256', 'status', 'width', 'height',
+                                    'has_transparency', 'failures')
+                    }
+                return answer, evidence, transcript
             structured_calls = image_tool_calls(transcript)
             if structured_calls > 1:
                 raise ValidationError('more than one native image tool invocation detected')

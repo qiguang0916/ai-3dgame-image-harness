@@ -1,0 +1,13 @@
+document_type = "asset_manifest"
+schema_version = 1
+asset_id = "EXAMPLE_BG_001"
+asset_type = "background"
+status = "bootstrap"
+
+[locks]
+hard = ["declared visible object identity"]
+soft = ["lighting softness"]
+
+[qa]
+max_repair_passes = 2
+max_regeneration_passes = 1

@@ -229,3 +229,28 @@ review/disclosure still require evidence. See `docs/V09_ACCEPTANCE.md`.
 ## v0.10.1 — Reliability hardening (code verified)
 
 State snapshots use atomic replacement; accepted batch runs and CLI status recheck their current source, SHA-bound receipt/PNG/QA, and job-specific evidence location. Orphan/native-host evidence blocks unsafe restarts. **189/189 tests passed locally; no new v0.10.1 real ImageGen throughput or Unity Player release proof is claimed.** See [v0.10.1 acceptance](docs/V101_ACCEPTANCE.md). Remaining staged work continues in [v1 development plan](docs/V1_DEVELOPMENT_ROADMAP.md).
+
+
+## v0.11 — Typed Game Image Art Contracts (development)
+
+Optional `[asset_spec_v2]` in a standard `schema_version=1` edit TOML adds seven explicit asset purposes (concept_prop, background, ui_icon, sprite, vfx_sheet, texture_candidate, steam_capsule), size/alpha/color-space controls, approved reference role authority, and a SHA-locked project Style Kit. Legacy prompts/runs are unchanged unless this table is used.
+
+```bash
+./bin/ai-3dgame-image-harness asset-spec scaffold --category background --asset-id NEW_BG_001 --out /new/empty/path
+./bin/ai-3dgame-image-harness asset-spec inspect --asset /new/empty/path/asset.toml --edit /new/empty/path/create.toml
+./bin/ai-3dgame-image-harness asset-spec style-hash --json /path/to/original-style-fields.json
+```
+
+A scaffolding command creates only draft TOML, **not actual artwork or rights approval**. For a batch that must share one coherent visual family, set the optional top-level `style_kit_sha256` in `batch.json`; each v2 edit in that batch must contain an identical, SHA-validated Style Kit. A mismatch blocks production **before** any model call.
+
+The original ImageGen backend, audit receipts, immutable Master policy and Unity proof requirements are retained. v2 concept and Steam marketing outputs are blocked from being mislabeled as Unity in-game asset staging. For examples and remaining real-image/KNIFE_001 gates, see [v0.11 acceptance](docs/V11_ACCEPTANCE.md).
+
+
+### Live smoke and critic uncertainty
+
+The v0.11 private native-host test generated one real 1536x1024 PNG and verified source/Receipt hashes, but the independent critic returned BLOCKED on technical-output uncertainty. The tool now safely preserves NOT_VERIFIABLE rather than discarding its QA record. No new visual quality acceptance or Unity/Steam certification is claimed. See docs/V11_ACCEPTANCE.md.
+
+
+### v0.11 successful audited native smoke
+
+A second fresh isolated Codex ImageGen job (`WORKBENCH_STOOL_001`) completed **ACCEPTED**, independent critic **PASS_WITH_NOTES** (4/4 required gates PASS), and production-audit **PASS** (1 generation/1 QA, zero integrity errors). The original BLOCKED lantern run remains unmodified. Evidence is local/private; see [v0.11 acceptance §7](docs/V11_ACCEPTANCE.md). This is not Unity, commercial rights, or Steam certification.
