@@ -11,6 +11,7 @@ import fcntl
 import json
 import os
 import sys
+import tempfile
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -563,12 +564,28 @@ def load_run(path: Path) -> dict[str, Any]:
 
 
 def save_run(path: Path, run: dict[str, Any]) -> None:
+    """Commit a full run snapshot with atomic replacement.
+
+    A crash during JSON serialization, write, flush or rename must never
+    truncate an already-valid run. Existing proof files are never overwritten
+    by this function, only the replaceable state pointer is updated.
+    """
     validate_run_state(run)
+    path = Path(path)
+    if path.is_symlink():
+        raise ValidationError("run state path must not be a symlink")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(run, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    payload = json.dumps(run, indent=2, ensure_ascii=False) + "\n"
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 @contextmanager
