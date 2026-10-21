@@ -122,6 +122,9 @@ class PrecisionQualityTests(unittest.TestCase):
             self.assertEqual(result["composited_image"]["strictly_locked"]
                              ["alpha_changed_pixels"], 0)
             self.assertTrue(result["seam_diagnostics"]["visual_seam_review_required"])
+            self.assertTrue(result["alpha_boundary_diagnostics"]["applicable"])
+            self.assertGreater(result["alpha_boundary_diagnostics"]["max_excess_alpha_jump"], 0)
+            self.assertIn("alpha_seam_excess.png", result["heatmaps"])
 
     def test_size_mode_and_contract_hash_mismatches_block(self):
         for case in ("size", "mode", "source", "mask"):
