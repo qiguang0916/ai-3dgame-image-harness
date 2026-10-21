@@ -260,6 +260,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     outside_changed = int((composite_delta & ~target).sum())
     locked_changed = int((composite_delta & locked).sum())
     edit_changed = int((composite_delta & editable).sum())
+    raw_edit_mismatch = int((np.any(composed != generated, axis=2) & editable).sum())
     if profile is None:
         color_a = _lab_srgb(original[..., :3])
         raw_de = np.linalg.norm(color_a - _lab_srgb(generated[..., :3]), axis=2)
@@ -276,7 +277,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
                                  _ssim_map(original[..., :3], composed[..., :3]), composed_de)
     seam_image, seam = _seam_excess(original, composed, editable)
     alpha_image, alpha_seam = _alpha_seam_excess(original, composed, editable)
-    state = ("BLOCKED" if (locked_changed != 0 or edit_changed == 0)
+    state = ("BLOCKED" if (locked_changed != 0 or edit_changed == 0 or raw_edit_mismatch != 0)
              else "MEASURED_NEEDS_VISUAL_REVIEW")
     result: dict[str, Any] = {
         "schema_version": 1, "state": state,
@@ -294,7 +295,9 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
             "outside_target_mismatches": outside_changed,
             "mask_protected_mismatches": protect_changed,
             "editable_pixels": int(editable.sum()), "changed_editable_pixels": edit_changed,
-            "objective_gate": "PASS" if locked_changed == 0 and edit_changed > 0 else "FAIL",
+            "candidate_pixel_mismatches_in_editable": raw_edit_mismatch,
+            "objective_gate": ("PASS" if locked_changed == 0 and edit_changed > 0
+                               and raw_edit_mismatch == 0 else "FAIL"),
         },
         "thresholds": list(THRESHOLDS), "ssim_method": "uniform_7x7_luminance",
         "color_metric_note": color_note,
