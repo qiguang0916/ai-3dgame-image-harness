@@ -181,3 +181,44 @@ The check prevents exactly this known omission **when suitable independent
 anchor annotations are supplied**. A finite set of points cannot establish
 a complete object outline, artistic seams, missing unseen parts, source rights,
 or a user-approved Master. It never upgrades a candidate to art PASS.
+
+## v002 user-approved ROI/Mask binding (2026-10-21)
+
+The project owner explicitly approved the LAMP_001 three silver screw and
+RADIO_001 two red knob **v002 ROI rectangles and binary protection masks**
+in this conversation. This decision does **not** approve a new Master,
+confer complete independent art signoff or certify Unity/Steam readiness.
+
+A private, immutable `human_review_decision` JSON receipt binds the
+original Master and mask SHA, approved rectangles and both historical
+candidate/QA evidence items. The decision receipt SHA-256 is
+`6ac6a73def53297bbfa1327481fff518abaf8185589a81c72fea54e66104549b`;
+approved mask SHA values are:
+
+- LAMP: `82a6b86744f293c5a464affc55ca2e133bbb49fc273005b166171bcd137180aa`
+- RADIO: `53b73bdae0819d029213140f4888017da1115413ddc095634219a024a805685e`
+
+The `precision-report` CLI supports optional `--roi-approval-file`,
+`--roi-approval-sha256`, and `--asset-id` as an inseparable trio.
+`scripts/roi_mask_approval.py` fails closed if the record digest, asset ID,
+source SHA, Mask SHA, exact target rectangles, or conservative approval scope
+does not match the data being measured. Reports expose
+`ROI_MASK_DECISION_RECORD_BOUND`, not a cryptographic reviewer identity
+attestation. The record's source/chat claim cannot independently establish
+legal authorship or release authority.
+
+For the actual v002 private images, additional new-only
+`quality-approved-roi-v003.json` and `heatmaps-approved-roi-v003/` were
+produced and SHA-bound to the approved decision. Each case showed exact lock
+zero-mismatch, editable candidate pixel provenance PASS, and
+`SHA_BOUND_REPORT_MATCH`. Both remain
+`MEASURED_NEEDS_VISUAL_REVIEW` and keep `commercial_release_certified=false`.
+
+A separate full-resolution part-level visual crop check did not reveal
+obvious missing material or large seam artifacts in the five target
+components. This is model observation, not accountable independent human
+art signoff. Original v0.9 model PNGs were reused; **no new Codex ImageGen
+calls** have run in this approval stage. The connected bridge currently
+blocks the `codex` executable as "command not in allowlist"; restoring
+explicit permission is needed to execute fresh native A/B samples, without
+introducing any paid API/local-model fallback.
