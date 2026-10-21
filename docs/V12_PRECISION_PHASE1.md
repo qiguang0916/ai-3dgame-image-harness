@@ -117,7 +117,7 @@ auto-mark art/Unity/rights/Steam PASS. When ICC metadata is present, DeltaE is
 omitted rather than incorrectly assuming an unmanaged color profile.
 Objective strict-lock violations or zero effective ROI edits produce `BLOCKED`.
 
-Nine synthetic/offline negative and metric tests were added. These are
+Ten synthetic/offline negative and metric tests were added. These are
 algorithm regression evidence only, not the outstanding real-image C01/C05/C06/
 C09 acceptance. Historical private LAMP/RADIO original PNGs and approved
 Master/ROI/mask reviewer signoff are still required before claiming improvement.
