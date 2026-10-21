@@ -117,3 +117,15 @@ PBR physical accuracy, legality, Steam policy acceptance or Unity rendering.
    Unity actual import/Player proof, rights and Steam review separately.
 
 **Do not close Issue #13 or merge PR #11/#12 on the strength of this pilot.**
+
+## Opt-in component-coverage regression added after the pilot
+
+The open semantic-mask false-positive risk prompted an optional fail-closed
+`required_edit_points` field on enforced, SHA-bound region contracts.
+In the actual private LAMP/RADIO v001 trial, respectively one of three screw
+centers and one of four knob-side anchor probes were located outside their
+original approximate ROI and now reject the contract **before output**.
+The corresponding v002 ellipse masks passed all **7** annotated anchor probes
+(3 lamp and 4 radio). This result validates targeted sampling only, not
+shape completeness, art signoff or authority for those annotations. The final
+review still requires full-resolution independent image judgment.
