@@ -148,3 +148,36 @@ Read the full evidence, denominators, known limitations and private file
 handling in [V12_REAL_IMAGE_AB_PILOT_20261021.md](V12_REAL_IMAGE_AB_PILOT_20261021.md).
 The remaining C01/C05/C06/C09 release gates stay OPEN/BLOCKED until real
 fresh-run and independent art-review evidence is attached.
+
+## v0.12 opt-in required edit component anchor check
+
+The true-image v001 pilot exposed a serious semantic omission: rectangle ROI
+and strict zero outside drift can both PASS even when a required screw/knob
+is only partially edited. For explicitly reviewer-annotated anchors, the
+optional `[[region_contract.required_edit_points]]` array now validates both
+the declared ROI **and** effective editable pixels after strict Mask locking:
+
+```toml
+[[region_contract.required_edit_points]]
+id = "left_screw_center"
+uv = [0.265, 0.864]
+
+[[region_contract.required_edit_points]]
+id = "center_screw_center"
+uv = [0.345, 0.864]
+```
+
+Rules: anchors are opt-in and permitted only with an `enforce` strict_mask
+contract; IDs must be unique; UV pairs must be finite in [0,1), and must be
+inside at least one declared target and an editable 0-mask pixel. Any anchor
+outside the ROI or masked-out in the final pixel mask fails before a candidate
+is written. The independent `precision-report` applies the same checks.
+
+The actual historical private LAMP/RADIO **v001** rectangles were rechecked
+with three lamp screw anchors and four radio control-face edge anchors: both
+correctly `BLOCKED_ANCHOR_MISSING`. The refined part-level **v002**
+masks validated all seven anchors and still left protected pixels unchanged.
+The check prevents exactly this known omission **when suitable independent
+anchor annotations are supplied**. A finite set of points cannot establish
+a complete object outline, artistic seams, missing unseen parts, source rights,
+or a user-approved Master. It never upgrades a candidate to art PASS.
