@@ -116,6 +116,39 @@ def _seam_excess(original: Any, composed: Any, editable: Any) -> tuple[Any, dict
     }
 
 
+def _alpha_seam_excess(original: Any, composed: Any, editable: Any) -> tuple[Any | None, dict[str, Any]]:
+    """RGBA boundary alpha discontinuity diagnostic, not a blending/art PASS."""
+    import numpy as np
+
+    if original.shape[2] != 4:
+        return None, {"applicable": False}
+    heat = np.zeros(editable.shape, dtype=np.uint8)
+    jumps: list[Any] = []
+    for axis in (0, 1):
+        if axis == 1:
+            p, q = np.s_[:, :-1], np.s_[:, 1:]
+        else:
+            p, q = np.s_[:-1, :], np.s_[1:, :]
+        crossing = editable[p] ^ editable[q]
+        if not bool(crossing.any()):
+            continue
+        new_jump = np.abs(composed[p][..., 3].astype(np.int16) -
+                          composed[q][..., 3].astype(np.int16))
+        old_jump = np.abs(original[p][..., 3].astype(np.int16) -
+                          original[q][..., 3].astype(np.int16))
+        excess = np.maximum(0, new_jump - old_jump).astype(np.uint8)
+        jumps.extend(excess[crossing].tolist())
+        for part in (p, q):
+            heat[part] = np.maximum(heat[part], np.where(crossing, excess, 0))
+    return heat, {
+        "applicable": True, "boundary_pairs": len(jumps),
+        "max_excess_alpha_jump": int(max(jumps, default=0)),
+        "mean_excess_alpha_jump": (round(float(sum(jumps) / len(jumps)), 4)
+                                   if jumps else 0.0),
+        "visual_alpha_halo_review_required": True,
+    }
+
+
 def _measure(reference: Any, image: Any, regions: dict[str, Any],
              ssim: Any, delta_e: Any | None) -> dict[str, Any]:
     import numpy as np
@@ -242,6 +275,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     composite_metrics = _measure(original, composed, masks,
                                  _ssim_map(original[..., :3], composed[..., :3]), composed_de)
     seam_image, seam = _seam_excess(original, composed, editable)
+    alpha_image, alpha_seam = _alpha_seam_excess(original, composed, editable)
     state = ("BLOCKED" if (locked_changed != 0 or edit_changed == 0)
              else "MEASURED_NEEDS_VISUAL_REVIEW")
     result: dict[str, Any] = {
@@ -265,7 +299,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
         "thresholds": list(THRESHOLDS), "ssim_method": "uniform_7x7_luminance",
         "color_metric_note": color_note,
         "raw_image": candidate_metrics, "composited_image": composite_metrics,
-        "seam_diagnostics": seam,
+        "seam_diagnostics": seam, "alpha_boundary_diagnostics": alpha_seam,
         "limitations": [
             "Numeric pixel measurements do NOT confirm that model subjects remain aligned.",
             "Seam heatmaps are risk indicators; independent visual review is mandatory.",
@@ -285,6 +319,8 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     }
     if composed_de is not None:
         artifacts["composite_delta_e76.png"] = np.clip(composed_de * 5.0, 0, 255).astype(np.uint8)
+    if alpha_image is not None:
+        artifacts["alpha_seam_excess.png"] = alpha_image
     result["heatmaps"] = {}
     for filename, image in artifacts.items():
         payload = _png_bytes(image)
