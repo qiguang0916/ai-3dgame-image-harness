@@ -18,6 +18,7 @@ Commands:
   batch validate|run|status|unity-stage  Audited commercial source / image batch
   asset-spec inspect|scaffold|style-hash  Typed AssetSpec v2, draft starters and style SHA
   precision-compose <options>  SHA-bound strict ROI compositing, review required
+  precision-report <options>   Quantitative raw/composited A/B evidence and seam heatmaps
   doctor                    Check local deterministic QA dependencies
   validate [files...]      Validate TOML manifest/edit/QA contracts
   init <options>           Create an auditable run (execution_loop.py init)
@@ -63,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     if command == 'precision-compose':
         from precision_composite import main as precision
         return precision(rest)
+    if command == 'precision-report':
+        from precision_quality import main as precision_quality
+        return precision_quality(rest)
     if command == "version":
         print("ai-3dgame-image-harness 0.12.0-dev")
         return 0
