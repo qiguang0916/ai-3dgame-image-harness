@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from artifact_integrity import canonical_json_bytes, resolve_in_workspace, sha256_bytes, sha256_file
-from region_quality import _pixel_rect, validate_region_contract
+from region_quality import _pixel_rect, validate_region_contract, verify_required_edit_points
 from runtime_preflight import validate_image_file
 from validate_project import ValidationError, load_document, validate_document
 
@@ -86,6 +86,7 @@ def strict_composite(reference: Path, candidate: Path, contract: dict[str, Any],
         x0, y0, x1, y1 = _pixel_rect(item["bbox"], width, height)
         targets[y0:y1, x0:x1] = True
     permitted = targets & (mask_data == 0)
+    validated_anchors = verify_required_edit_points(contract, permitted)
     if not bool(permitted.any()):
         raise ValidationError("no editable target pixels remain after mask")
     composed = reference_data.copy()
@@ -144,6 +145,7 @@ def strict_composite(reference: Path, candidate: Path, contract: dict[str, Any],
         "mask_sha256": mask_sha, "output_sha256": output_sha,
         "contract_sha256": sha256_bytes(canonical_json_bytes(contract)),
         "width": width, "height": height, "image_mode": original_mode,
+        "required_edit_points": validated_anchors,
         "editable_pixels": int(permitted.sum()),
         "changed_editable_pixels": changed_count,
         "outside_target_pixel_mismatches": outside_mismatch,
