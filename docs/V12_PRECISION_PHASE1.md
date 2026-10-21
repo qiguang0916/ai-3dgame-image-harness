@@ -121,3 +121,30 @@ Ten synthetic/offline negative and metric tests were added. These are
 algorithm regression evidence only, not the outstanding real-image C01/C05/C06/
 C09 acceptance. Historical private LAMP/RADIO original PNGs and approved
 Master/ROI/mask reviewer signoff are still required before claiming improvement.
+
+## 2026-10-21 real archived image mask A/B pilot
+
+The historical LAMP/RADIO private genuine ImageGen PNGs were recovered and
+independently SHA-checked; their source/result dimensions and ICC matched. On
+the same raw output, the original broad approximate rectangle masks caused a
+real semantic failure (one brass lamp screw was not edited, and both radio
+knobs became half brass/half red) even though locked-pixel mismatch was 0.
+
+Drafting separate, object-centered binary ellipse masks yielded new v0.12
+candidates with all three lamp screws silver and both radio knobs deep red
+in preliminary crop inspections. On actual decoded pixels the v002 candidate
+showed **0 protected/outside pixel mismatches** and an improved measured maximum
+excess RGB seam gradient compared with the initial trial (LAMP 67→30; RADIO
+231→27). These are **unapproved trial masks**, not a human art PASS. The native
+source PNGs are historical v0.9 outputs, not fresh v0.12 ImageGen calls.
+
+The `precision-report` tool also supports optional `--compose-report
+/path/to/precision-compose-report.json`. It binds that report's source, raw,
+mask, output and contract SHA, dimensions, edit-count and conservative review
+status to measured current files. Matching JSON does not attest model identity
+or override independent seam/geometry/human review.
+
+Read the full evidence, denominators, known limitations and private file
+handling in [V12_REAL_IMAGE_AB_PILOT_20261021.md](V12_REAL_IMAGE_AB_PILOT_20261021.md).
+The remaining C01/C05/C06/C09 release gates stay OPEN/BLOCKED until real
+fresh-run and independent art-review evidence is attached.
