@@ -129,3 +129,31 @@ The corresponding v002 ellipse masks passed all **7** annotated anchor probes
 (3 lamp and 4 radio). This result validates targeted sampling only, not
 shape completeness, art signoff or authority for those annotations. The final
 review still requires full-resolution independent image judgment.
+
+## Project-owner ROI/Mask approval and receipt binding
+
+On 2026-10-21 the user responded `批准，继续` to the explicit
+question about approving the current v002 LAMP silver-screw and RADIO
+deep-red-knob editing regions and binary masks. This decision is
+limited to those exact source-sha-bound **ROIs and Masks**. The historical
+source Masters have not been replaced or promoted.
+
+The approval receipt is stored privately under the v002 trial
+`approvals/USER_ROI_MASK_APPROVAL_v002.json` with receipt digest
+`6ac6a73def53297bbfa1327481fff518abaf8185589a81c72fea54e66104549b`.
+The two Mask byte digests are unchanged from the v002 A/B table above.
+Independent quality runs with new output filenames verified both
+`ROI_MASK_DECISION_RECORD_BOUND` and `SHA_BOUND_REPORT_MATCH` along
+with strict protected-pixel zero mismatch and target edits.
+
+Tests explicitly reject rewritten Mask SHA, changed ROIs, swapped assets,
+stale decision receipt digests, incomplete approval arguments, and attempted
+elevation to visual/Steam approval. The current GitHub CI evidence confirms
+**265 Python unit tests PASS**, 10 manifests validated, host E2E dry run PASS.
+
+This approval does **not** close independent high-resolution art signoff,
+fresh independent v0.12 ImageGen A/B repeatability, commercial rights or
+Unity/Steam gates. The Codex native CLI invocation remains inaccessible
+through the new MCP's command allowlist; no new image model action or paid
+fallback was attempted. The evaluation stays an approved-region,
+provisional-image candidate until those separate gates are met.
