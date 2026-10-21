@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from artifact_integrity import canonical_json_bytes, resolve_in_workspace, sha256_bytes, sha256_file
-from region_quality import _pixel_rect, validate_region_contract
+from region_quality import _pixel_rect, validate_region_contract, verify_required_edit_points
 from validate_project import ValidationError, load_document
 
 
@@ -303,6 +303,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
         x0, y0, x1, y1 = _pixel_rect(region["bbox"], width, height)
         target[y0:y1, x0:x1] = True
     editable = target & (protect == 0)
+    validated_anchors = verify_required_edit_points(contract, editable)
     if not bool(editable.any()):
         raise ValidationError("strict contract has no editable pixels")
     locked = ~editable
@@ -346,6 +347,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
         "source_sha256": hashes["source"], "raw_candidate_sha256": hashes["candidate"],
         "composited_sha256": hashes["composite"], "mask_sha256": hashes["mask"],
         "contract_sha256": sha256_bytes(canonical_json_bytes(contract)),
+        "required_edit_points": validated_anchors,
         "composition_evidence": composition_evidence,
         "width": width, "height": height, "pixel_mode": mode,
         "strict_preservation": {
