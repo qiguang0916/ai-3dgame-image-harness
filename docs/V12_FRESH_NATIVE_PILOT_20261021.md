@@ -57,3 +57,28 @@ It cross-checks both assets' raw Master/Mask/Codex source SHA, user ROI approval
 2. Perform human source-resolution signoff for both LAMP and RADIO on geometry, materials, seams and image quality; do not infer legal authority from hashes.
 3. Expand from 2 new authentic images to v0.13 controlled 12→30 independent tasks only after v0.12 real QA gates close. Record every failed attempt and source/CI evidence.
 4. Verify KNIFE_001 authority and Unity Editor/Player actual delivery separately.
+
+## Second machine review at source-pixel detail (2026-10-21)
+
+The LAMP material exception was independently re-examined using a nine-cell
+contact sheet: approved Master/native ImageGen/strict composite for all three
+screws, with actual 110×96 source-pixel crops enlarged using nearest-neighbor.
+This was a **new visual reviewer only**: no native ImageGen regeneration or
+source changes.
+
+Review JSON state: **`NOT_VERIFIABLE`**. The three screw faces are visibly
+cold-silver with realistic sheen, but the actual source pixels do not reveal
+distinct fine directional brushed grain. Slot highlights and tonal variation
+are not sufficient evidence of brushed steel texture. This is **not** a
+technical pixel failure and is **not** permission to alter the accepted Mask;
+it is a material acceptance gap.
+
+Private evidence: `LAMP_001/direct-native-attempt-v003/LAMP_V003_PIXEL_1TO1_MATERIAL_REVIEW.png`
+SHA `af404404b742b92a3a8330dd7e9feb6f991812858bff637ad831ba842f7bf0d3`,
+and its `independent-material-zoom-qa.json`. Both remain Mac-only.
+
+Disposition: LAMP `MATERIAL_BRUSHED_GRAIN_NOT_VERIFIABLE`; retain
+`BLOCKED` on full machine-art acceptance. RADIO remains machine visual
+`PASS`. An optional future repair must be a separately budgeted, new
+native attempt with SHA-bound source and protected Mask, with **no**
+alteration of the historical v003 evidence and no unfounded art signoff.
