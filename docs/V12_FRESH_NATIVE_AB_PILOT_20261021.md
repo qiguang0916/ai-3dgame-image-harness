@@ -38,6 +38,16 @@ candidate:
 No paid OpenAI Images API, third-party generation service, or local model
 was used or substituted.
 
+**Evidence-level caveat:** Both successful fresh ImageGen sessions ran via direct
+allowlisted `dc_bridge codex exec` attempts after the earlier Python-spawned
+Harness host failed under its execution sandbox. Their outputs were SHA-bound
+to the user-approved Mask and checked by deterministic v0.12 compose/quality
+scripts; however the direct sessions have **not** been retroactively inserted
+into the original `production_autopilot` Run/Receipt state machine or certified
+by the standard independent `production-audit` release step. Preserve the
+original BLOCKED Run. Treat this as a verified direct-native precision pilot,
+not a fully audited `production_autopilot` batch release acceptance.
+
 ## Source and native candidate binding
 
 | SHA binding | LAMP_001 | RADIO_001 |
