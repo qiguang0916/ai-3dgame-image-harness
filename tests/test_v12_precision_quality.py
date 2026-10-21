@@ -102,6 +102,22 @@ class PrecisionQualityTests(unittest.TestCase):
             self.assertEqual(result["strict_preservation"]["outside_target_mismatches"], 1)
             self.assertFalse(result["commercial_release_certified"])
 
+    def test_tampered_editable_pixels_cannot_masquerade_as_native_composite(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            src, raw, merged, mask, spec = self.inputs(root)
+            with Image.open(merged) as original:
+                updated = original.copy()
+            # Protected/outside pixels remain identical. A naive 0-drift check
+            # would falsely accept this altered in-target candidate.
+            updated.putpixel((8, 8), (12, 34, 56))
+            updated.save(merged)
+            result = self.call(root, src, raw, merged, spec)
+            self.assertEqual(result["strict_preservation"]["locked_mismatches"], 0)
+            self.assertEqual(result["strict_preservation"]["candidate_pixel_mismatches_in_editable"], 1)
+            self.assertEqual(result["state"], "BLOCKED")
+            self.assertEqual(result["strict_preservation"]["objective_gate"], "FAIL")
+
     def test_no_effective_local_edit_is_blocked(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
