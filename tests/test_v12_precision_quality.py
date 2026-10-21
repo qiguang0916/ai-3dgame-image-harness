@@ -263,6 +263,25 @@ class PrecisionQualityTests(unittest.TestCase):
                 self.assertFalse((root / "quality-bound.json").exists())
                 self.assertFalse((root / "heatmaps-bound").exists())
 
+    def test_required_edit_points_are_verified_in_quality_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            src, raw, merged, mask, spec=self.inputs(root)
+            spec["required_edit_points"]=[{"id":"knob_center","uv":[.35,.35]}]
+            result=self.call(root,src,raw,merged,spec)
+            self.assertEqual(result["required_edit_points"],
+                             [{"id":"knob_center","pixel_xy":[8,8],"editable":True}])
+
+    def test_masked_required_edit_point_must_block_quality(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            src, raw, merged, mask, spec=self.inputs(root)
+            spec["required_edit_points"]=[{"id":"protected_knob_edge","uv":[.43,.43]}]
+            with self.assertRaises(ValidationError):
+                self.call(root,src,raw,merged,spec)
+            self.assertFalse((root/"quality.json").exists())
+            self.assertFalse((root/"heatmaps").exists())
+
     def test_ssim_identity(self):
         import numpy as np
         img = np.arange(12 * 12 * 3, dtype=np.uint8).reshape((12, 12, 3))
