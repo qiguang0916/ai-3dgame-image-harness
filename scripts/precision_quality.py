@@ -246,7 +246,10 @@ def _verify_compose_report(path: Path, hashes: dict[str, str],
 def build_quality_report(reference: Path, candidate: Path, composite: Path,
                          contract: dict[str, Any], workspace_root: Path,
                          report_path: Path, heatmap_dir: Path,
-                         *, compose_report: Path | None = None) -> dict[str, Any]:
+                         *, compose_report: Path | None = None,
+                         roi_approval_file: Path | None = None,
+                         roi_approval_sha256: str | None = None,
+                         asset_id: str | None = None) -> dict[str, Any]:
     """Produce immutable measurement evidence, never an artistic/commercial PASS."""
     import numpy as np
 
@@ -256,6 +259,10 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     if not isinstance(policy, dict):
         raise ValidationError("quality A/B needs an SHA-pinned strict_mask")
     root = Path(workspace_root).expanduser().resolve()
+    approval_values = (roi_approval_file, roi_approval_sha256, asset_id)
+    if any(value is not None for value in approval_values) and not all(
+            value is not None for value in approval_values):
+        raise ValidationError("ROI approval requires file, receipt SHA and asset ID together")
     source = resolve_in_workspace(root, reference)
     raw = resolve_in_workspace(root, candidate)
     merged = resolve_in_workspace(root, composite)
@@ -307,6 +314,18 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     if not bool(editable.any()):
         raise ValidationError("strict contract has no editable pixels")
     locked = ~editable
+    if all(value is not None for value in approval_values):
+        from roi_mask_approval import verify_roi_mask_approval
+        roi_review = verify_roi_mask_approval(
+            workspace_root=root,
+            approval_path=roi_approval_file,
+            approval_sha256=roi_approval_sha256,
+            asset_id=asset_id,
+            reference=source, mask_path=mask_path,
+            contract=contract,
+        )
+    else:
+        roi_review = {"status": "NOT_SUPPLIED"}
     composite_delta = np.any(original != composed, axis=2)
     protect_changed = int((composite_delta & (protect == 255)).sum())
     outside_changed = int((composite_delta & ~target).sum())
@@ -349,6 +368,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
         "contract_sha256": sha256_bytes(canonical_json_bytes(contract)),
         "required_edit_points": validated_anchors,
         "composition_evidence": composition_evidence,
+        "roi_mask_review": roi_review,
         "width": width, "height": height, "pixel_mode": mode,
         "strict_preservation": {
             "locked_pixels": int(locked.sum()), "locked_mismatches": locked_changed,
@@ -404,6 +424,9 @@ def main(argv: list[str] | None = None) -> int:
                  "composite", "report", "heatmap-dir"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--compose-report", type=Path)
+    parser.add_argument("--roi-approval-file", type=Path)
+    parser.add_argument("--roi-approval-sha256")
+    parser.add_argument("--asset-id")
     args = parser.parse_args(argv)
     try:
         root = args.workspace_root.expanduser().resolve()
@@ -412,7 +435,10 @@ def main(argv: list[str] | None = None) -> int:
         report = build_quality_report(args.reference, args.candidate,
                                       args.composite, edit["region_contract"],
                                       root, args.report, args.heatmap_dir,
-                                      compose_report=args.compose_report)
+                                      compose_report=args.compose_report,
+                                      roi_approval_file=args.roi_approval_file,
+                                      roi_approval_sha256=args.roi_approval_sha256,
+                                      asset_id=args.asset_id)
         print(json.dumps({"state": report["state"], "report": str(args.report)}))
         return 0 if report["state"] == "MEASURED_NEEDS_VISUAL_REVIEW" else 2
     except (ValidationError, OSError, ValueError, KeyError, TypeError) as exc:
