@@ -82,3 +82,42 @@ python3 -m unittest discover -s tests -q
 python3 scripts/demo_e2e.py
 git diff --check
 ```
+
+## 2026-10-21: Quantitative A/B measurement extension (candidate, C03 partial)
+
+The new `scripts/precision_quality.py` is a **read-only image evaluator**. It
+does not call ImageGen, edit Masters, promote an asset, or certify independent
+visual QA. It consumes four **real pixel files**: approved source, native-output
+candidate, precision-composed candidate, and the SHA-locked binary mask declared
+by the edit contract. All paths are confined to the declared workspace. It
+refuses invalid or overwritten output paths.
+
+```bash
+./bin/ai-3dgame-image-harness precision-report \
+  --workspace-root /absolute/workspace \
+  --edit /absolute/workspace/edit.toml \
+  --reference /absolute/workspace/approved-master.png \
+  --candidate /absolute/workspace/raw-native-candidate.png \
+  --composite /absolute/workspace/precision-candidate.png \
+  --report /absolute/workspace/qa/quality-report-v001.json \
+  --heatmap-dir /absolute/workspace/qa/quality-heatmaps-v001
+```
+
+Output: source/raw/composite/mask/contract SHA hashes; thresholded change counts
+at 0/5/15/30 max-channel difference for editable/locked/outside/protected pixels;
+7×7 uniform-window luminance SSIM; CIE DeltaE76 assuming untagged input is
+sRGB; RGBA alpha-change counts; cross-boundary excessive RGB gradients; immutable
+raw/composite difference, mask, seam, and optional DeltaE heatmaps.
+
+**Limitations:** Numeric measurements are not spatial registration or material
+acceptance. Even if dimensions, mode and ICC bytes match, visual registration
+requires independent review; the report always marks the subjective A/B
+comparison `NOT_COMPARABLE_UNTIL_SPATIAL_ALIGNMENT_REVIEW`. It will never
+auto-mark art/Unity/rights/Steam PASS. When ICC metadata is present, DeltaE is
+omitted rather than incorrectly assuming an unmanaged color profile.
+Objective strict-lock violations or zero effective ROI edits produce `BLOCKED`.
+
+Nine synthetic/offline negative and metric tests were added. These are
+algorithm regression evidence only, not the outstanding real-image C01/C05/C06/
+C09 acceptance. Historical private LAMP/RADIO original PNGs and approved
+Master/ROI/mask reviewer signoff are still required before claiming improvement.
