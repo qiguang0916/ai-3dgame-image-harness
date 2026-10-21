@@ -21,6 +21,23 @@ class AuditTests(unittest.TestCase):
         self.assertEqual("ACCEPTED",output["state"])
         return r
 
+    def test_blocked_run_with_null_receipt_and_qa_returns_blocked_report(self):
+        import json
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            path=root/"run.json"
+            path.write_text(json.dumps({
+                "state":"BLOCKED","auditable":True,
+                "workspace_root":str(root),
+                "current_receipt":None,"last_qa":None,
+                "required_hard_gates":["requested_change"],
+                "iteration":0,"asset_id":"LAMP_001"
+            }))
+            result=audit_run(path)
+            self.assertEqual(result["status"],"BLOCKED")
+            self.assertFalse(result["steam_approved"])
+            self.assertTrue(any("receipt" in x for x in result["failures"]))
+
     def test_does_not_certify_missing_run(self):
         with tempfile.TemporaryDirectory() as raw:
             result=audit_run(Path(raw)/"missing.json")

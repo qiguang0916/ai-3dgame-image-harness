@@ -52,7 +52,9 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
             raise ValidationError("run path escapes its declared workspace")
         if not run.get("current_receipt") or receipt_digest(run["current_receipt"])!=run["current_receipt"]["receipt_id"]:
             problems.append("current receipt missing or digest mismatch")
-        receipt=run.get("current_receipt",{})
+        receipt=run.get("current_receipt") or {}
+        if not isinstance(receipt,dict):
+            raise ValidationError("malformed current receipt")
         if receipt.get("result"):
             target=resolve_in_workspace(root,receipt["result"]["path"])
             if not target.is_file() or sha256_file(target)!=receipt.get("result_sha256"):
@@ -61,7 +63,9 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
                 problems.append("final generated PNG is corrupt")
         else:
             problems.append("no final result binding")
-        qa=run.get("last_qa",{})
+        qa=run.get("last_qa") or {}
+        if not isinstance(qa,dict):
+            raise ValidationError("malformed final QA")
         hard=set(run.get("required_hard_gates",[]))
         present={g.get("name") for g in qa.get("gates",[]) if isinstance(g,dict)}
         if qa.get("status") not in {"PASS","PASS_WITH_NOTES"} or not hard or not hard.issubset(present):

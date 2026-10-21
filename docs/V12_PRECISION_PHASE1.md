@@ -82,3 +82,143 @@ python3 -m unittest discover -s tests -q
 python3 scripts/demo_e2e.py
 git diff --check
 ```
+
+## 2026-10-21: Quantitative A/B measurement extension (candidate, C03 partial)
+
+The new `scripts/precision_quality.py` is a **read-only image evaluator**. It
+does not call ImageGen, edit Masters, promote an asset, or certify independent
+visual QA. It consumes four **real pixel files**: approved source, native-output
+candidate, precision-composed candidate, and the SHA-locked binary mask declared
+by the edit contract. All paths are confined to the declared workspace. It
+refuses invalid or overwritten output paths.
+
+```bash
+./bin/ai-3dgame-image-harness precision-report \
+  --workspace-root /absolute/workspace \
+  --edit /absolute/workspace/edit.toml \
+  --reference /absolute/workspace/approved-master.png \
+  --candidate /absolute/workspace/raw-native-candidate.png \
+  --composite /absolute/workspace/precision-candidate.png \
+  --report /absolute/workspace/qa/quality-report-v001.json \
+  --heatmap-dir /absolute/workspace/qa/quality-heatmaps-v001
+```
+
+Output: source/raw/composite/mask/contract SHA hashes; thresholded change counts
+at 0/5/15/30 max-channel difference for editable/locked/outside/protected pixels;
+7×7 uniform-window luminance SSIM; CIE DeltaE76 assuming untagged input is
+sRGB; RGBA alpha-change counts; cross-boundary excessive RGB gradients; immutable
+raw/composite difference, mask, seam, and optional DeltaE heatmaps.
+
+**Limitations:** Numeric measurements are not spatial registration or material
+acceptance. Even if dimensions, mode and ICC bytes match, visual registration
+requires independent review; the report always marks the subjective A/B
+comparison `NOT_COMPARABLE_UNTIL_SPATIAL_ALIGNMENT_REVIEW`. It will never
+auto-mark art/Unity/rights/Steam PASS. When ICC metadata is present, DeltaE is
+omitted rather than incorrectly assuming an unmanaged color profile.
+Objective strict-lock violations or zero effective ROI edits produce `BLOCKED`.
+
+Ten synthetic/offline negative and metric tests were added. These are
+algorithm regression evidence only, not the outstanding real-image C01/C05/C06/
+C09 acceptance. Historical private LAMP/RADIO original PNGs and approved
+Master/ROI/mask reviewer signoff are still required before claiming improvement.
+
+## 2026-10-21 real archived image mask A/B pilot
+
+The historical LAMP/RADIO private genuine ImageGen PNGs were recovered and
+independently SHA-checked; their source/result dimensions and ICC matched. On
+the same raw output, the original broad approximate rectangle masks caused a
+real semantic failure (one brass lamp screw was not edited, and both radio
+knobs became half brass/half red) even though locked-pixel mismatch was 0.
+
+Drafting separate, object-centered binary ellipse masks yielded new v0.12
+candidates with all three lamp screws silver and both radio knobs deep red
+in preliminary crop inspections. On actual decoded pixels the v002 candidate
+showed **0 protected/outside pixel mismatches** and an improved measured maximum
+excess RGB seam gradient compared with the initial trial (LAMP 67→30; RADIO
+231→27). These are **unapproved trial masks**, not a human art PASS. The native
+source PNGs are historical v0.9 outputs, not fresh v0.12 ImageGen calls.
+
+The `precision-report` tool also supports optional `--compose-report
+/path/to/precision-compose-report.json`. It binds that report's source, raw,
+mask, output and contract SHA, dimensions, edit-count and conservative review
+status to measured current files. Matching JSON does not attest model identity
+or override independent seam/geometry/human review.
+
+Read the full evidence, denominators, known limitations and private file
+handling in [V12_REAL_IMAGE_AB_PILOT_20261021.md](V12_REAL_IMAGE_AB_PILOT_20261021.md).
+The remaining C01/C05/C06/C09 release gates stay OPEN/BLOCKED until real
+fresh-run and independent art-review evidence is attached.
+
+## v0.12 opt-in required edit component anchor check
+
+The true-image v001 pilot exposed a serious semantic omission: rectangle ROI
+and strict zero outside drift can both PASS even when a required screw/knob
+is only partially edited. For explicitly reviewer-annotated anchors, the
+optional `[[region_contract.required_edit_points]]` array now validates both
+the declared ROI **and** effective editable pixels after strict Mask locking:
+
+```toml
+[[region_contract.required_edit_points]]
+id = "left_screw_center"
+uv = [0.265, 0.864]
+
+[[region_contract.required_edit_points]]
+id = "center_screw_center"
+uv = [0.345, 0.864]
+```
+
+Rules: anchors are opt-in and permitted only with an `enforce` strict_mask
+contract; IDs must be unique; UV pairs must be finite in [0,1), and must be
+inside at least one declared target and an editable 0-mask pixel. Any anchor
+outside the ROI or masked-out in the final pixel mask fails before a candidate
+is written. The independent `precision-report` applies the same checks.
+
+The actual historical private LAMP/RADIO **v001** rectangles were rechecked
+with three lamp screw anchors and four radio control-face edge anchors: both
+correctly `BLOCKED_ANCHOR_MISSING`. The refined part-level **v002**
+masks validated all seven anchors and still left protected pixels unchanged.
+The check prevents exactly this known omission **when suitable independent
+anchor annotations are supplied**. A finite set of points cannot establish
+a complete object outline, artistic seams, missing unseen parts, source rights,
+or a user-approved Master. It never upgrades a candidate to art PASS.
+
+## v002 user-approved ROI/Mask binding (2026-10-21)
+
+The project owner explicitly approved the LAMP_001 three silver screw and
+RADIO_001 two red knob **v002 ROI rectangles and binary protection masks**
+in this conversation. This decision does **not** approve a new Master,
+confer complete independent art signoff or certify Unity/Steam readiness.
+
+A private, immutable `human_review_decision` JSON receipt binds the
+original Master and mask SHA, approved rectangles and both historical
+candidate/QA evidence items. The decision receipt SHA-256 is
+`6ac6a73def53297bbfa1327481fff518abaf8185589a81c72fea54e66104549b`;
+approved mask SHA values are:
+
+- LAMP: `82a6b86744f293c5a464affc55ca2e133bbb49fc273005b166171bcd137180aa`
+- RADIO: `53b73bdae0819d029213140f4888017da1115413ddc095634219a024a805685e`
+
+The `precision-report` CLI supports optional `--roi-approval-file`,
+`--roi-approval-sha256`, and `--asset-id` as an inseparable trio.
+`scripts/roi_mask_approval.py` fails closed if the record digest, asset ID,
+source SHA, Mask SHA, exact target rectangles, or conservative approval scope
+does not match the data being measured. Reports expose
+`ROI_MASK_DECISION_RECORD_BOUND`, not a cryptographic reviewer identity
+attestation. The record's source/chat claim cannot independently establish
+legal authorship or release authority.
+
+For the actual v002 private images, additional new-only
+`quality-approved-roi-v003.json` and `heatmaps-approved-roi-v003/` were
+produced and SHA-bound to the approved decision. Each case showed exact lock
+zero-mismatch, editable candidate pixel provenance PASS, and
+`SHA_BOUND_REPORT_MATCH`. Both remain
+`MEASURED_NEEDS_VISUAL_REVIEW` and keep `commercial_release_certified=false`.
+
+A separate full-resolution part-level visual crop check did not reveal
+obvious missing material or large seam artifacts in the five target
+components. This is model observation, not accountable independent human
+art signoff. Original v0.9 model PNGs were reused; **no new Codex ImageGen
+calls** have run in this approval stage. The connected bridge currently
+blocks the `codex` executable as "command not in allowlist"; restoring
+explicit permission is needed to execute fresh native A/B samples, without
+introducing any paid API/local-model fallback.

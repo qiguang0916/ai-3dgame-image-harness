@@ -243,5 +243,40 @@ class StrictCompositeTests(unittest.TestCase):
             self.assertFalse(qa["steam_approved"])
 
 
+    def test_required_edit_anchor_outside_roi_blocks_before_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); src, edited, mask, contract=self.fixture(root)
+            contract["required_edit_points"]=[
+                {"id":"first_screw", "uv":[0.10, 0.5]},
+            ]
+            with self.assertRaises(ValidationError):
+                self.composite(root, contract, src, edited)
+            self.assertFalse((root/"fixed.png").exists())
+
+    def test_required_edit_anchor_masked_inside_roi_blocks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); src, edited, mask, contract=self.fixture(root)
+            contract["required_edit_points"]=[
+                {"id":"knob_left_side", "uv":[0.45, 0.45]},
+            ]
+            with self.assertRaises(ValidationError):
+                self.composite(root, contract, src, edited)
+            self.assertFalse((root/"fixed.png").exists())
+
+    def test_required_edit_anchor_validates_sample_and_schema(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); src, edited, mask, contract=self.fixture(root)
+            contract["required_edit_points"]=[
+                {"id":"screw_center", "uv":[0.36, 0.36]},
+            ]
+            result=self.composite(root, contract, src, edited)
+            self.assertEqual(result["required_edit_points"],
+                             [{"id":"screw_center","pixel_xy":[4,4],"editable":True}])
+            wrong=json.loads(json.dumps(contract))
+            wrong["required_edit_points"][0]["uv"]=[True,0.36]
+            with self.assertRaises(ValidationError):
+                validate_region_contract({"operation":"local_edit",
+                                          "region_contract":wrong},"test")
+
 if __name__=="__main__":
     unittest.main()
