@@ -115,6 +115,46 @@ def validate_region_contract(edit: dict[str, Any], where: str) -> None:
                 raise ValidationError(f"{where}: strict_mask.{field} must be SHA-256")
 
 
+    probes = contract.get("required_edit_points")
+    if probes is not None:
+        if strict is None or not isinstance(probes, list) or not probes:
+            raise ValidationError(f"{where}: required_edit_points needs strict_mask and a nonempty list")
+        point_ids: set[str] = set()
+        for index, entry in enumerate(probes):
+            where_point = f"{where}: required_edit_points[{index}]"
+            if not isinstance(entry, dict) or set(entry) != {"id", "uv"}:
+                raise ValidationError(f"{where_point}: expected only id and uv")
+            name, uv = entry["id"], entry["uv"]
+            if not isinstance(name, str) or not name.strip() or name in point_ids:
+                raise ValidationError(f"{where_point}: expected unique nonempty id")
+            point_ids.add(name)
+            if (not isinstance(uv, list) or len(uv) != 2 or
+                    any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+                        not math.isfinite(v) or not 0 <= v < 1 for v in uv)):
+                raise ValidationError(f"{where_point}: uv must be two finite coordinates in [0,1)")
+            u, v = uv
+            if not any(box[0] <= u < box[2] and box[1] <= v < box[3]
+                       for box in target_boxes):
+                raise ValidationError(f"{where_point}: point lies outside all editable ROIs")
+
+
+def verify_required_edit_points(contract: dict[str, Any], editable: Any) -> list[dict[str, Any]]:
+    """Verify user-annotated visible part anchors are actually permitted by ROI+mask.
+
+    Anchor checks are sampling safeguards, NOT complete object segmentation or
+    independent human approval.
+    """
+    height, width = editable.shape
+    result: list[dict[str, Any]] = []
+    for point in contract.get("required_edit_points", []):
+        x = min(width - 1, int(point["uv"][0] * width))
+        y = min(height - 1, int(point["uv"][1] * height))
+        if not bool(editable[y, x]):
+            raise ValidationError(f"required visible component point '{point['id']}' is masked out")
+        result.append({"id": point["id"], "pixel_xy": [x, y], "editable": True})
+    return result
+
+
 def _pixel_rect(bbox: list[float], width: int, height: int) -> tuple[int, int, int, int]:
     x0,y0,x1,y1 = bbox
     a,b = math.floor(x0*width), math.floor(y0*height)
