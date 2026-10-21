@@ -221,6 +221,48 @@ class PrecisionQualityTests(unittest.TestCase):
             self.assertEqual(status, 2)
             self.assertEqual(json.loads(repeated.getvalue())["state"], "BLOCKED")
 
+    def test_optional_composition_report_binds_actual_files(self):
+        from precision_composite import strict_composite
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            src, raw, _, mask, spec = self.inputs(root)
+            output, compose_json = root / "from-compositor.png", root / "compose.json"
+            strict_composite(src, raw, spec, root, output, compose_json)
+            result = build_quality_report(
+                src, raw, output, spec, root, root / "quality-bound.json",
+                root / "heatmaps-bound", compose_report=compose_json
+            )
+            self.assertEqual(result["composition_evidence"]["status"],
+                             "SHA_BOUND_REPORT_MATCH")
+            self.assertEqual(result["composition_evidence"]["sha256"],
+                             sha256_file(compose_json))
+            self.assertEqual(result["strict_preservation"]["locked_mismatches"], 0)
+            self.assertEqual(result["artistic_visual_qa"], "REQUIRED")
+
+    def test_tampered_composition_report_refused_without_output(self):
+        from precision_composite import strict_composite
+        for mutation in ("bad_sha", "false_approval", "bad_change_count"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                src, raw, _, mask, spec = self.inputs(root)
+                output, compose_json = root / "from-compositor.png", root / "compose.json"
+                strict_composite(src, raw, spec, root, output, compose_json)
+                record = json.loads(compose_json.read_text())
+                if mutation == "bad_sha":
+                    record["candidate_sha256"] = "0" * 64
+                elif mutation == "false_approval":
+                    record["commercial_release_certified"] = True
+                else:
+                    record["changed_editable_pixels"] += 1
+                compose_json.write_text(json.dumps(record))
+                with self.assertRaises(ValidationError):
+                    build_quality_report(
+                        src, raw, output, spec, root, root / "quality-bound.json",
+                        root / "heatmaps-bound", compose_report=compose_json
+                    )
+                self.assertFalse((root / "quality-bound.json").exists())
+                self.assertFalse((root / "heatmaps-bound").exists())
+
     def test_ssim_identity(self):
         import numpy as np
         img = np.arange(12 * 12 * 3, dtype=np.uint8).reshape((12, 12, 3))
