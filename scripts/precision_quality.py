@@ -200,9 +200,53 @@ def _exclusive_bytes(path: Path, payload: bytes) -> None:
         os.fsync(handle.fileno())
 
 
+def _verify_compose_report(path: Path, hashes: dict[str, str],
+                           contract_sha: str, width: int, height: int,
+                           image_mode: str, changed_pixels: int) -> dict[str, Any]:
+    """Bind a precision-compose report to measured files, not to model identity.
+
+    The report remains self-reported and cannot establish native ImageGen origin,
+    actual artwork semantics, or human signoff.
+    """
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise ValidationError("composition report is missing or invalid JSON") from exc
+    if not isinstance(record, dict):
+        raise ValidationError("composition report must be a JSON object")
+    required = {
+        "schema_version": 1,
+        "state": "CANDIDATE_NEEDS_VISUAL_REVIEW",
+        "original_sha256": hashes["source"],
+        "candidate_sha256": hashes["candidate"],
+        "mask_sha256": hashes["mask"],
+        "output_sha256": hashes["composite"],
+        "contract_sha256": contract_sha,
+        "width": width,
+        "height": height,
+        "image_mode": image_mode,
+        "changed_editable_pixels": changed_pixels,
+        "outside_target_pixel_mismatches": 0,
+        "protected_pixel_mismatches": 0,
+        "visual_seam_review_required": True,
+        "commercial_release_certified": False,
+        "steam_approved": False,
+    }
+    for key, expected in required.items():
+        actual = record.get(key)
+        if type(actual) is not type(expected) or actual != expected:
+            raise ValidationError(f"composition report {key} disagrees with measured evidence")
+    return {
+        "status": "SHA_BOUND_REPORT_MATCH",
+        "sha256": sha256_file(path),
+        "provenance_note": "Composition JSON may be independently reproduced; native origin and visual QA not proven.",
+    }
+
+
 def build_quality_report(reference: Path, candidate: Path, composite: Path,
                          contract: dict[str, Any], workspace_root: Path,
-                         report_path: Path, heatmap_dir: Path) -> dict[str, Any]:
+                         report_path: Path, heatmap_dir: Path,
+                         *, compose_report: Path | None = None) -> dict[str, Any]:
     """Produce immutable measurement evidence, never an artistic/commercial PASS."""
     import numpy as np
 
@@ -218,6 +262,8 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     mask_path = resolve_in_workspace(root, policy["path"])
     report = resolve_in_workspace(root, report_path)
     heatmaps = resolve_in_workspace(root, heatmap_dir)
+    composition_path = (resolve_in_workspace(root, compose_report)
+                        if compose_report is not None else None)
     inputs = {source, raw, merged, mask_path}
     if len(inputs) != 4:
         raise ValidationError("source/candidate/composite/mask must be four distinct files")
@@ -225,6 +271,11 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
             or report.is_relative_to(heatmaps) or heatmaps.is_relative_to(report)
             or report.suffix.lower() != ".json"):
         raise ValidationError("output collides with source inputs or report directory")
+    if composition_path is not None and (
+            composition_path in inputs or composition_path == report
+            or composition_path == heatmaps or composition_path.is_relative_to(heatmaps)
+            or composition_path.suffix.lower() != ".json"):
+        raise ValidationError("composition report path collides with input/output files")
     if report.exists() or report.is_symlink() or heatmaps.exists() or heatmaps.is_symlink():
         raise ValidationError("existing report/heatmap path must not be overwritten")
 
@@ -261,6 +312,12 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
     locked_changed = int((composite_delta & locked).sum())
     edit_changed = int((composite_delta & editable).sum())
     raw_edit_mismatch = int((np.any(composed != generated, axis=2) & editable).sum())
+    composition_evidence = (
+        _verify_compose_report(
+            composition_path, hashes, sha256_bytes(canonical_json_bytes(contract)),
+            width, height, mode, edit_changed)
+        if composition_path is not None else {"status": "NOT_SUPPLIED"}
+    )
     if profile is None:
         color_a = _lab_srgb(original[..., :3])
         raw_de = np.linalg.norm(color_a - _lab_srgb(generated[..., :3]), axis=2)
@@ -289,6 +346,7 @@ def build_quality_report(reference: Path, candidate: Path, composite: Path,
         "source_sha256": hashes["source"], "raw_candidate_sha256": hashes["candidate"],
         "composited_sha256": hashes["composite"], "mask_sha256": hashes["mask"],
         "contract_sha256": sha256_bytes(canonical_json_bytes(contract)),
+        "composition_evidence": composition_evidence,
         "width": width, "height": height, "pixel_mode": mode,
         "strict_preservation": {
             "locked_pixels": int(locked.sum()), "locked_mismatches": locked_changed,
@@ -343,6 +401,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("workspace-root", "edit", "reference", "candidate",
                  "composite", "report", "heatmap-dir"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--compose-report", type=Path)
     args = parser.parse_args(argv)
     try:
         root = args.workspace_root.expanduser().resolve()
@@ -350,7 +409,8 @@ def main(argv: list[str] | None = None) -> int:
         edit = load_document(path).data
         report = build_quality_report(args.reference, args.candidate,
                                       args.composite, edit["region_contract"],
-                                      root, args.report, args.heatmap_dir)
+                                      root, args.report, args.heatmap_dir,
+                                      compose_report=args.compose_report)
         print(json.dumps({"state": report["state"], "report": str(args.report)}))
         return 0 if report["state"] == "MEASURED_NEEDS_VISUAL_REVIEW" else 2
     except (ValidationError, OSError, ValueError, KeyError, TypeError) as exc:
