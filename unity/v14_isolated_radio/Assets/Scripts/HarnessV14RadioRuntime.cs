@@ -149,4 +149,3 @@ public sealed class HarnessV14RadioRuntime : MonoBehaviour
         Application.Quit(ready ? 0 : 2);
     }
 }
-
