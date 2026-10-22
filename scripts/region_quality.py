@@ -284,8 +284,11 @@ def verify_region_gate(contract: dict[str, Any], reference: Path, result: Path,
                 raise ValidationError("region QA was NOT_VERIFIABLE; cannot claim another status")
         elif measured["status"] == "FAIL" and reported_status != "FAIL":
             raise ValidationError("region QA measured FAIL; cannot report PASS")
-        elif measured["status"] == "PASS" and reported_status not in {"PASS","FAIL"}:
-            raise ValidationError("region QA passed; expected PASS or conservative FAIL")
+        elif measured["status"] == "PASS" and reported_status not in {"PASS", "FAIL", "NOT_VERIFIABLE"}:
+            # A critic may conservatively decline to verify real pixels. This
+            # blocks acceptance via the required hard gate, but must preserve
+            # the original QA evidence rather than failing the state update.
+            raise ValidationError("region QA passed; critic verdict must be PASS, FAIL or NOT_VERIFIABLE")
     return measured
 
 
@@ -319,3 +322,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__=="__main__":
     raise SystemExit(main())
+

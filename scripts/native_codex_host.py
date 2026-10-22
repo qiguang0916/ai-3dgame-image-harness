@@ -167,6 +167,19 @@ class NativeCodexHost:
                 technical_precheck = inspect_output(images[-1], output_spec)
                 if technical_precheck['sha256'] != packet['result_binding']['sha256']:
                     raise ValidationError('technical precheck image not bound to receipt result')
+            region_precheck = None
+            if reviewer and 'visual.region_preservation' in packet.get('required_hard_gates', []):
+                from region_quality import compare_images
+                contract = packet.get('region_contract')
+                edit_targets = [(index, bound) for index, bound in enumerate(packet['input_bindings'])
+                                if bound.get('kind') == 'edit_target']
+                if len(edit_targets) != 1 or not isinstance(contract, dict):
+                    raise ValidationError('region critic requires one SHA-bound edit source/contract')
+                index, source_binding = edit_targets[0]
+                region_precheck = compare_images(images[index], images[-1], contract)
+                if (region_precheck['reference_sha256'] != source_binding['sha256']
+                        or region_precheck['result_sha256'] != packet['result_binding']['sha256']):
+                    raise ValidationError('region critic precheck is not SHA-bound to original and result')
             (stage / 'packet.json').write_text(json.dumps(packet), encoding='utf-8')
             staged_packet_sha = sha256_file(stage / 'packet.json')
             final = stage / 'final.json'
@@ -186,6 +199,22 @@ class NativeCodexHost:
                           'note,inspection_method,observation: distinct concrete pixel evidence. '
                           'Status PASS/PASS_WITH_NOTES/REPAIR_MINOR/REGENERATE_MAJOR/BLOCKED. '
                           'Unverifiable gates cannot PASS. No human, rights, or Steam approval claims.')
+                if region_precheck is not None:
+                    outside = region_precheck.get('outside_targets') or {}
+                    prompt += (
+                        ' DETERMINISTIC SHA-BOUND REGION MEASUREMENT from actual decoded '
+                        'source and final candidate pixels (not subjective model output): '
+                        f"source_sha256={region_precheck['reference_sha256']} "
+                        f"result_sha256={region_precheck['result_sha256']} "
+                        f"visual.region_preservation measured_status={region_precheck['status']} "
+                        f"outside_target_changed_fraction={outside.get('changed_fraction')} "
+                        f"pixel_threshold={region_precheck.get('pixel_threshold')}. "
+                        'If this measurement is PASS it establishes only the declared ROI '
+                        'pixel rule; inspect seams, alignment, original identity and material '
+                        'separately and never infer those from zero pixel drift. '
+                        'A conservative FAIL or NOT_VERIFIABLE remains allowed with '
+                        'specific visual reasons, but a measured region FAIL cannot be PASS.'
+                    )
                 if technical_precheck is not None:
                     prompt += (
                         ' DIGEST-BOUND TECHNICAL IMAGE MEASUREMENT from local verified '
@@ -235,6 +264,21 @@ class NativeCodexHost:
                         for key in ('sha256', 'status', 'width', 'height',
                                     'has_transparency', 'failures')
                     }
+                if region_precheck is not None:
+                    actual = next((gate for gate in answer['gates']
+                                   if gate['name'] == 'visual.region_preservation'), None)
+                    if actual is None or (
+                        actual['status'] == 'PASS' and region_precheck['status'] != 'PASS'
+                    ):
+                        raise ValidationError('critic region PASS conflicts with verified pixels')
+                    evidence['region_precheck'] = {
+                        'source_sha256': region_precheck['reference_sha256'],
+                        'result_sha256': region_precheck['result_sha256'],
+                        'status': region_precheck['status'],
+                        'outside_target_changed_fraction': (
+                            region_precheck.get('outside_targets') or {}
+                        ).get('changed_fraction'),
+                    }
                 return answer, evidence, transcript
             structured_calls = image_tool_calls(transcript)
             if structured_calls > 1:
@@ -251,3 +295,4 @@ class NativeCodexHost:
             )
             evidence.update(native_source=str(native), result_sha256=sha256_file(output))
             return output.read_bytes(), evidence, transcript
+

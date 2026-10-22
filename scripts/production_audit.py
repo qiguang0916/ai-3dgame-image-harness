@@ -16,6 +16,7 @@ from typing import Any
 
 from artifact_integrity import packet_digest, receipt_digest, png_metadata, resolve_in_workspace, sha256_file, sha256_bytes
 from native_codex_host import native_generated_source
+from native_strict_provenance import verify_native_strict_derivation
 from runtime_preflight import validate_image_file
 from validate_project import ValidationError
 
@@ -105,8 +106,19 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
                     raise ValidationError("not an authenticated native Codex host attestation")
                 if attestation.get("event_transcript_sha256")!=sha256_bytes(events):
                     raise ValidationError("Codex event transcript SHA mismatch")
-                native=native_generated_source(events,image,home)
-                if sha256_file(native)!=sha256_file(image):
+                if attestation.get("postprocess") is not None:
+                    if (attestation.get("packet_id") != packet["packet_id"] or
+                            step_receipt.get("host_attestation") != attestation):
+                        raise ValidationError("derived Host/Receipt attestation or packet differs")
+                    derived=verify_native_strict_derivation(run,packet,step_receipt,attestation,step)
+                    native_output=step/"native-generated.png"
+                    info["strict_composite"]=derived
+                else:
+                    if (step/"native-generated.png").exists() or (step/"precision-compose-report.json").exists():
+                        raise ValidationError("unbound native/strict composite artifacts")
+                    native_output=image
+                native=native_generated_source(events,native_output,home)
+                if sha256_file(native)!=sha256_file(native_output):
                     raise ValidationError("native Codex generated source SHA mismatch")
                 for binding in step_receipt.get("input_bindings",[]):
                     p=resolve_in_workspace(root,binding["path"])
@@ -119,6 +131,7 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
                     "receipt_id":step_receipt["receipt_id"],
                     "output_sha256":sha256_file(image),
                     "native_source_sha256":sha256_file(native),
+                    "native_output_sha256":sha256_file(native_output),
                     "transcript_sha256":sha256_bytes(events),
                 })
                 receipt_ids.append(step_receipt["receipt_id"])
@@ -196,4 +209,5 @@ def main(argv:list[str]|None=None)->int:
 
 if __name__=="__main__":
     raise SystemExit(main())
+
 

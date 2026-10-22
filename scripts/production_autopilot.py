@@ -9,6 +9,9 @@ import execution_loop as loop
 from artifact_integrity import (canonical_json_bytes, resolve_in_workspace, receipt_digest,
                                 sha256_bytes, workspace_relative)
 from native_codex_host import NativeCodexHost, validate_critic
+from native_strict_provenance import (
+    compose_native_generation, is_strict_native_run, preflight_native_strict,
+)
 from next_action import build_from_paths
 from validate_project import ValidationError, load_document
 
@@ -79,6 +82,11 @@ def drive(asset, edit, workspace_root, run_path, *, resume=False, max_actions=8,
                 run = loop.load_run(run_path)
                 action = packet['action']
                 step = evidence_dir / f"{run['iteration']:04d}-{action}"
+                # Prevalidate approved source, Mask, and prior repair receipt
+                # BEFORE any native Host call, so a broken repair cannot spend
+                # another generation and only then discover invalid lineage.
+                if action != 'visual_qa' and is_strict_native_run(run):
+                    preflight_native_strict(run, packet)
                 # Any partial step is ambiguous: never rerun a paid/tool action.
                 step.mkdir(parents=True, exist_ok=False)
                 json_new(step / 'packet.json', packet)
@@ -100,8 +108,8 @@ def drive(asset, edit, workspace_root, run_path, *, resume=False, max_actions=8,
                     run = loop.load_run(run_path)
                     raise ValidationError('concurrent run mutation requires reconciliation')
                 write_new(step / 'events.jsonl', transcript)
-                json_new(step / 'attestation.json', attestation)
                 if reviewer:
+                    json_new(step / 'attestation.json', attestation)
                     value = validate_critic(value, run['required_hard_gates'])
                     qa = {**value, 'document_type': 'qa_report', 'schema_version': 1,
                           'report_id': f"QA_{run['run_id']}_{run['iteration']}",
@@ -114,7 +122,15 @@ def drive(asset, edit, workspace_root, run_path, *, resume=False, max_actions=8,
                     run = loop.apply_qa_from_path(run, qa_path)
                 else:
                     result_path = step / 'generated.png'
-                    write_new(result_path, value)
+                    if is_strict_native_run(run):
+                        # Native model bytes and original events remain independent.
+                        # Derived output is the only image sent to final Visual QA.
+                        write_new(step / 'native-generated.png', value)
+                        proof = compose_native_generation(run, packet, step)
+                        attestation = {**attestation, 'postprocess': proof}
+                    else:
+                        write_new(result_path, value)
+                    json_new(step / 'attestation.json', attestation)
                     run = loop._record_auditable_generation(
                         run, str(result_path), packet=packet,
                         receipt_path=step / 'receipt.json', host_attestation=attestation)
@@ -186,3 +202,4 @@ def main(argv=None):
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
