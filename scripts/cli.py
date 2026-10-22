@@ -16,6 +16,7 @@ Usage: ai-3dgame-image-harness <command> [options]
 Commands:
   autopilot run|status      Bounded native Codex subscription production loop
   batch validate|run|status|unity-stage  Audited commercial source / image batch
+  batch-benchmark <options> Read-only native batch KPI, confidence intervals (JSON/Markdown)
   asset-spec inspect|scaffold|style-hash  Typed AssetSpec v2, draft starters and style SHA
   precision-compose <options>  SHA-bound strict ROI compositing, review required
   precision-report <options>   Quantitative raw/composited A/B evidence and seam heatmaps
@@ -58,6 +59,9 @@ def main(argv: list[str] | None = None) -> int:
     if command == 'batch':
         from batch_production import main as batch
         return batch(rest)
+    if command == 'batch-benchmark':
+        from batch_benchmark import main as benchmark
+        return benchmark(rest)
     if command == 'asset-spec':
         from asset_spec_v2 import main as asset_spec
         return asset_spec(rest)
