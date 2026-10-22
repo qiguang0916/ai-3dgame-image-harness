@@ -80,6 +80,8 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
             problems.append("generation iteration count does not match recorded image steps")
         home=Path(codex_home or Path.home()/".codex").expanduser().resolve()
         receipt_ids=[]
+        receipt_result_digests={}
+        receipt_by_iteration={}
         for step in generation_dirs:
             info={"name":step.name,"status":"BLOCKED"}
             summary["generation_steps"].append(info)
@@ -120,6 +122,8 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
                     "transcript_sha256":sha256_bytes(events),
                 })
                 receipt_ids.append(step_receipt["receipt_id"])
+                receipt_result_digests[step_receipt["receipt_id"]]=sha256_file(image)
+                receipt_by_iteration[int(step.name.split("-",1)[0])+1]=step_receipt["receipt_id"]
             except (OSError,ValueError,KeyError,TypeError,ValidationError,json.JSONDecodeError) as e:
                 problems.append(step.name+": "+str(e))
         if receipt_ids and receipt.get("receipt_id")!=receipt_ids[-1]:
@@ -137,8 +141,23 @@ def audit_run(run_path:Path, *, codex_home:Path|None=None) -> dict[str,Any]:
                 events=(step/"events.jsonl").read_bytes()
                 if qt.get("receipt_id") not in receipt_ids:
                     raise ValidationError("critic QA receipt not a verified native generation")
-                if qt.get("result_sha256") is None or qt.get("asset_id")!=run.get("asset_id"):
-                    raise ValidationError("critic QA binding invalid")
+                if (qt.get("run_id")!=run.get("run_id")
+                        or qt.get("request_id")!=run.get("request_id")
+                        or qt.get("asset_id")!=run.get("asset_id")
+                        or qt.get("iteration")!=int(step.name.split("-",1)[0])):
+                    raise ValidationError("critic QA run/request/iteration identity mismatch")
+                if qt.get("receipt_id")!=receipt_by_iteration.get(qt["iteration"]):
+                    raise ValidationError("critic QA receipt belongs to another generation iteration")
+                if qt.get("result_sha256")!=receipt_result_digests.get(qt["receipt_id"]):
+                    raise ValidationError("critic QA output SHA mismatches its native receipt")
+                if step==critic_dirs[-1] and run.get("state")=="ACCEPTED":
+                    # The final Run verdict must be the actual persisted critic
+                    # report, not a separately edited PASS in run.json.
+                    fields=("document_type","schema_version","report_id","asset_id",
+                            "request_id","run_id","iteration","receipt_id",
+                            "result_sha256","status","summary","gates","repair_directives")
+                    if any(qa.get(key)!=qt.get(key) for key in fields):
+                        raise ValidationError("final Run QA differs from persisted critic report")
                 if attestation.get("event_transcript_sha256")!=sha256_bytes(events):
                     raise ValidationError("critic event transcript hash mismatch")
                 if packet.get("packet_id")!=packet_digest(packet):
@@ -177,3 +196,4 @@ def main(argv:list[str]|None=None)->int:
 
 if __name__=="__main__":
     raise SystemExit(main())
+
