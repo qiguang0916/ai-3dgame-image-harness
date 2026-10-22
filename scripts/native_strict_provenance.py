@@ -18,6 +18,7 @@ from artifact_integrity import (
 )
 from precision_composite import strict_composite
 from precision_quality import _verify_compose_report
+from material_finish import _shape, finish_material, verify_finished_material
 from region_quality import _pixel_rect, validate_region_contract, verify_required_edit_points
 from validate_project import ValidationError, load_document
 
@@ -105,6 +106,14 @@ def _context(run: dict[str, Any], packet: dict[str, Any]):
     return root, contract, source, mask
 
 
+def _frozen_material_recipe(run: dict[str, Any], root: Path) -> dict[str, Any] | None:
+    document = load_document(resolve_in_workspace(root, run["edit_document_path"])).data
+    recipe = document.get("material_finish")
+    if recipe is not None and not isinstance(recipe, dict):
+        raise ValidationError("material_finish must be a TOML table")
+    return recipe
+
+
 def preflight_native_strict(run: dict[str, Any], packet: dict[str, Any]) -> None:
     """Fail before consuming a native call on stale repair, Mask or ROI inputs."""
     import numpy as np
@@ -116,6 +125,7 @@ def preflight_native_strict(run: dict[str, Any], packet: dict[str, Any]) -> None
         if im.format != "PNG" or im.mode not in ("RGB", "RGBA"):
             raise ValidationError("native strict source must be RGB/RGBA PNG")
         width, height = im.size
+        im_mode = im.mode
     with Image.open(mask) as im:
         im.load()
         if im.format != "PNG" or im.mode != "L" or im.size != (width, height):
@@ -131,6 +141,13 @@ def preflight_native_strict(run: dict[str, Any], packet: dict[str, Any]) -> None
     if not editable.any():
         raise ValidationError("no editable Mask pixels before native generation")
     verify_required_edit_points(contract, editable)
+    recipe = _frozen_material_recipe(run, Path(run["workspace_root"]).resolve())
+    if recipe is not None:
+        if im_mode != "RGB":
+            raise ValidationError("smooth enamel material preset requires RGB source before native generation")
+        # Reject malformed or out-of-scope local material postprocessing
+        # BEFORE spending a native ImageGen invocation.
+        _shape(recipe, width, height, editable)
 
 
 def _expected_paths(root: Path, step: Path):
@@ -141,9 +158,10 @@ def _expected_paths(root: Path, step: Path):
     }
 
 
-def _proof(root: Path, step: Path, contract: dict[str, Any], source: Path, mask: Path):
+def _proof(root: Path, step: Path, contract: dict[str, Any], source: Path, mask: Path,
+           recipe: dict[str, Any] | None = None):
     paths = _expected_paths(root, step)
-    return {
+    proof = {
         "schema_version": 1,
         "kind": "sha_bound_strict_composite",
         **paths,
@@ -156,6 +174,16 @@ def _proof(root: Path, step: Path, contract: dict[str, Any], source: Path, mask:
         "artistic_approval": "REQUIRED",
         "model_generated_composite_directly": False,
     }
+    if recipe is not None:
+        proof["material_finish"] = {
+            "preset": recipe.get("preset"),
+            "recipe_sha256": sha256_bytes(canonical_json_bytes(recipe)),
+            "finished_native_sha256": sha256_file(step / "material-finished-native.png"),
+            "finish_report_sha256": sha256_file(step / "material-finish-report.json"),
+            "status": "DETERMINISTIC_DERIVATION_NOT_NATIVE_OUTPUT",
+            "human_art_approved": False,
+        }
+    return proof
 
 
 def compose_native_generation(run: dict[str, Any], packet: dict[str, Any],
@@ -168,8 +196,14 @@ def compose_native_generation(run: dict[str, Any], packet: dict[str, Any],
     report = step / "precision-compose-report.json"
     if not raw.is_file() or raw.is_symlink():
         raise ValidationError("native original is missing or symlinked")
-    strict_composite(source, raw, contract, root, result, report)
-    return _proof(root, step, contract, source, mask)
+    recipe = _frozen_material_recipe(run, root)
+    candidate = raw
+    if recipe is not None:
+        candidate = step / "material-finished-native.png"
+        finish_material(root, source, raw, mask, contract, recipe,
+                        candidate, step / "material-finish-report.json")
+    strict_composite(source, candidate, contract, root, result, report)
+    return _proof(root, step, contract, source, mask, recipe)
 
 
 def verify_native_strict_derivation(run: dict[str, Any], packet: dict[str, Any],
@@ -189,7 +223,19 @@ def verify_native_strict_derivation(run: dict[str, Any], packet: dict[str, Any],
     report = step / "precision-compose-report.json"
     if any(not f.is_file() or f.is_symlink() for f in (raw, output, report)):
         raise ValidationError("native, derived PNG or compose receipt missing or symlinked")
-    expected = _proof(root, step, contract, source, mask)
+    recipe = _frozen_material_recipe(run, root)
+    candidate = raw
+    material_replay = None
+    if recipe is not None:
+        candidate = step / "material-finished-native.png"
+        material_replay = verify_finished_material(
+            root, source, raw, mask, contract, recipe,
+            candidate, step / "material-finish-report.json"
+        )
+    elif ((step / "material-finished-native.png").exists()
+          or (step / "material-finish-report.json").exists()):
+        raise ValidationError("unapproved material finish artifacts beside native PNG")
+    expected = _proof(root, step, contract, source, mask, recipe)
     if proof != expected:
         raise ValidationError("native strict derived evidence SHA or lineage mismatch")
     if (receipt.get("result_sha256") != expected["result_sha256"]
@@ -203,10 +249,10 @@ def verify_native_strict_derivation(run: dict[str, Any], packet: dict[str, Any],
             raise ValidationError("strict source RGB/RGBA PNG required")
         mode, size, icc = im.mode, im.size, im.info.get("icc_profile")
         original = np.asarray(im, dtype=np.uint8).copy()
-    with Image.open(raw) as im:
+    with Image.open(candidate) as im:
         im.load()
         if (im.format, im.mode, im.size, im.info.get("icc_profile")) != ("PNG", mode, size, icc):
-            raise ValidationError("native candidate dimensions/mode/ICC not comparable")
+            raise ValidationError("native-derived candidate dimensions/mode/ICC not comparable")
         generated = np.asarray(im, dtype=np.uint8).copy()
     with Image.open(output) as im:
         im.load()
@@ -238,7 +284,9 @@ def verify_native_strict_derivation(run: dict[str, Any], packet: dict[str, Any],
         raise ValidationError("strict native edit has no effective target modification")
     report_check = _verify_compose_report(
         report,
-        {"source": expected["source_sha256"], "candidate": expected["native_sha256"],
+        {"source": expected["source_sha256"],
+         "candidate": (expected["material_finish"]["finished_native_sha256"]
+                       if recipe is not None else expected["native_sha256"]),
          "composite": expected["result_sha256"], "mask": expected["mask_sha256"]},
         expected["contract_sha256"], width, height, mode, changed,
     )
@@ -251,5 +299,7 @@ def verify_native_strict_derivation(run: dict[str, Any], packet: dict[str, Any],
         "changed_editable_pixels": changed,
         "protected_pixel_mismatches": 0,
         "artistic_approval": "NOT_VERIFIED",
+        "material_finish_replay": material_replay,
     }
+
 
