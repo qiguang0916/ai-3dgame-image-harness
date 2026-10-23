@@ -54,12 +54,14 @@ Codex 原生 ImageGen → SHA 绑定的原生 PNG/Receipt
 # 一个已有且位于同一工作区的 asset.toml + edit.toml（批准 Master/Mask 的 SHA 固定在合同中）
 ./bin/ai-3dgame-image-harness produce run \
   --workspace-root /absolute/private/asset-workspace \
-  --asset asset.toml --edit edit.toml
+  --asset asset.toml --edit edit.toml \
+  --export-name candidate-001
 
 # 被安全中断时显式恢复（不得自动覆盖/重做模糊的宿主步骤）
 ./bin/ai-3dgame-image-harness produce run \
   --workspace-root /absolute/private/asset-workspace \
-  --asset asset.toml --edit edit.toml --resume
+  --asset asset.toml --edit edit.toml --resume \
+  --export-name candidate-001
 
 # 只读查询；若 Run 为 ACCEPTED，自动独立重验 production-audit
 ./bin/ai-3dgame-image-harness produce status \
@@ -164,3 +166,9 @@ Codex 原生 ImageGen → SHA 绑定的原生 PNG/Receipt
 - 对已正式 `BLOCKED` 的 LAMP 历史 Run 实际尝试导出：退出码 2，未建立 exports 目录。
 - 新增 6 项 fixture-only 导出负面/回归单测（总计本地 326 个测试）；独立 GitHub CI 需在 PR #20 最新提交上确认。
 - 以上均属**技术候选可用性**。私有来源权利、人工最终美术、KNIFE_001 权威 Master、正式 Unity 游戏内资产、商业发布仍是 BLOCKED；不能据此宣布 Steam-ready 或 12/30/60 批次完成。
+
+### 同一 `produce run` 命令自动导出（可选）
+
+为消除手工第二条命令，`produce run` 新增可选 `--export-name candidate-001`。新任务或显式 `--resume` 继续后的 **Run 确实达到 ACCEPTED 且生产审计通过**时，才执行与 `produce export` 相同的不可覆盖私有导出。非终态不导出；名称不合法、目录已存在或路径越界时**在调用 Codex 前**拒绝。默认不填写 `--export-name` 时所有老行为不变。
+
+2026-10-23 对**此前真实验收通过**的 RADIO Run 执行 `produce run --resume --export-name v1_radio_autoexport_20261023_v001`，实际退出 0，重新生产审计 PASS，自动导出 1536×1024 PNG，结果 SHA 仍为 `a8f6c83d5759cdc17681ec04ee6034b1a3dd46748718b3322d48ad0f44c9d83c`，清单 SHA `cb3460e1ebe5395b054757a9b953057fe6a681a53f114deebd959f82b86bba32`。因 Run 已为 ACCEPTED，**这不是新的一次 ImageGen 生成，也不能增加正式商业样本数**。自动导出本身包含新的离线正/负测试；最终真实生产可靠性仍须用新来源充分批准的 KNIFE_001 素材验证。
