@@ -19,12 +19,14 @@ Repository: https://github.com/qiguang0916/ai-3dgame-image-harness
 # 已有经批准 Master/Mask 与 asset.toml、edit.toml 的私人工作区
 ./bin/ai-3dgame-image-harness produce run \
   --workspace-root /absolute/private/asset-workspace \
-  --asset asset.toml --edit edit.toml
+  --asset asset.toml --edit edit.toml \
+  --export-name candidate-001  # 仅当真实技术审计 PASS 时自动导出
 
 # 需要继续时显式 --resume，绝不自动覆盖有歧义的宿主结果
 ./bin/ai-3dgame-image-harness produce run \
   --workspace-root /absolute/private/asset-workspace \
-  --asset asset.toml --edit edit.toml --resume
+  --asset asset.toml --edit edit.toml --resume \
+  --export-name candidate-001
 
 # 只读：自动重新审计已经 ACCEPTED 的真实任务
 ./bin/ai-3dgame-image-harness produce status \
