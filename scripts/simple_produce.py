@@ -18,7 +18,8 @@ from artifact_integrity import resolve_in_workspace
 from native_codex_host import NativeCodexHost
 from production_audit import audit_run
 from production_autopilot import drive
-from validate_project import ValidationError
+from runtime_preflight import run_preflight
+from validate_project import ValidationError, load_document
 
 
 def _in_workspace(root: Path, value: Path) -> Path:
@@ -26,6 +27,51 @@ def _in_workspace(root: Path, value: Path) -> Path:
     if not value.is_absolute():
         value = root / value
     return resolve_in_workspace(root, value)
+
+
+def inspect_source_inputs(root: Path, asset_path: Path, edit_path: Path) -> dict[str, Any]:
+    """Read-only inventory using the EXISTING runtime preflight. No Run or Host."""
+    asset = load_document(asset_path).data
+    edit = load_document(edit_path).data
+    if asset.get("asset_id") != edit.get("asset_id"):
+        raise ValidationError("asset and edit identity mismatch")
+    refs = {ref["id"]: ref for ref in asset.get("references", [])}
+    wanted: list[str] = []
+    target = edit.get("execution", {}).get("edit_target_reference_id")
+    if target:
+        wanted.append(target)
+    for binding in edit.get("reference_bindings", []):
+        key = binding["reference_id"]
+        if key not in wanted:
+            wanted.append(key)
+    inputs = []
+    for ref_id in wanted:
+        ref = refs.get(ref_id)
+        if ref is None:
+            inputs.append({"reference_id": ref_id, "status": "NOT_DECLARED"})
+            continue
+        relative = ref["path"]
+        actual = _in_workspace(root, Path(relative))
+        exists = actual.is_file() and not actual.is_symlink()
+        inputs.append({
+            "reference_id": ref_id,
+            "declared_path": relative,
+            "declared_state": ref.get("state"),
+            "status": "SOURCE_PRESENT_NOT_AUTHORITY_VERIFIED" if exists else "MISSING_SOURCE",
+        })
+    preflight = run_preflight(asset, edit, root, dry_run=False)
+    return {
+        "asset_id": asset["asset_id"],
+        "technical_preflight": preflight["status"],
+        "reason_code": preflight.get("reason_code"),
+        "selected_reference_count": len(inputs),
+        "selected_references": inputs,
+        "original_master_authority": "NOT_VERIFIED_BY_BYTES_ALONE",
+        "codex_imagegen_calls": 0,
+        "run_state_written": False,
+        "release_ready": False,
+        "steam_approved": False,
+    }
 
 
 def summary(run_path: Path) -> dict[str, Any]:
@@ -77,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
         description="One real native Codex image job. Automatic machine QA and independent audit; no commercial certification.",
     )
     actions = parser.add_subparsers(dest="action", required=True)
+    check = actions.add_parser("check", help="Read-only source preflight; no Run or Codex calls")
+    check.add_argument("--workspace-root", type=Path, required=True)
+    check.add_argument("--asset", type=Path, required=True)
+    check.add_argument("--edit", type=Path, required=True)
     produce = actions.add_parser("run", help="Start or explicitly resume one technical image job")
     produce.add_argument("--workspace-root", type=Path, required=True)
     produce.add_argument("--asset", type=Path, required=True,
@@ -93,6 +143,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.action == "check":
+            root = args.workspace_root.expanduser().resolve()
+            if not root.is_dir():
+                raise ValidationError("workspace must already exist")
+            asset = _in_workspace(root, args.asset)
+            edit = _in_workspace(root, args.edit)
+            if not asset.is_file() or not edit.is_file():
+                raise ValidationError("asset/edit manifest absent")
+            report = inspect_source_inputs(root, asset, edit)
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            return 0 if report["technical_preflight"] == "PASS" else 2
         if args.action == "run":
             root = args.workspace_root.expanduser().resolve()
             if not root.is_dir():
