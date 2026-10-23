@@ -64,6 +64,12 @@ Codex 原生 ImageGen → SHA 绑定的原生 PNG/Receipt
 # 只读查询；若 Run 为 ACCEPTED，自动独立重验 production-audit
 ./bin/ai-3dgame-image-harness produce status \
   --run /absolute/private/asset-workspace/run.json
+
+# 最终输出：仅独立技术审计 PASS 才允许写入技术候选 PNG 与审核清单
+./bin/ai-3dgame-image-harness produce export \
+  --run /absolute/private/asset-workspace/run.json \
+  --name candidate-001
+# <workspace>/exports/candidate-001/{candidate.png,manifest.json}
 ```
 
 结果统一输出 `run_state`、`technical_audit`、`output_png`、`output_sha256`、`machine_visual_qa` 和阻塞原因。
@@ -143,3 +149,18 @@ Codex 原生 ImageGen → SHA 绑定的原生 PNG/Receipt
 - 不把 `open -a` 放进桥接白名单；长驻 Player 管理可单独在获授权接口实现，但**不属于核心图像 v1.0 的准入条件**。
 - 不引入商业专有或未知许可参考作为可分发素材，不公开用户私有图像和构建产物。
 - 不新增第二套批处理框架、测试框架或美术引擎；第一选择永远是复用已证实的代码。
+
+## 8. 2026-10-23 — 实际技术候选导出试点
+
+`produce export` 只是已有真实 `production-audit` 的最后一层交付包装；它**不**改变既有模型和维修逻辑，也不提升 Master。单个私人工作区执行 `produce export --run <原生真实 Run 路径> --name <唯一名称>`，只有已 ACCEPTED 且重新独立审计 PASS 时，才将源 PNG 逐字节复制为 `exports/<名称>/candidate.png`，并写入 `manifest.json`（原 Run 相对路径与 SHA、Receipt ID、图片 SHA/尺寸、机器视觉状态、未完成的人工/权益/Unity/Steam 门禁）。文件夹和文件只能新建，不能覆盖历史成果；非法名称、越界路径及无审计通过的任务均被拒绝。
+
+**实际 RADIO 导出（私有 Mac，未上传图片）：**
+
+- 原真实 Codex/Mask/材质精修/视觉审计完整 Run：`RADIO_001__RADIO_001_V13_MATERIAL_AUDIT_20261022_001`。
+- `candidate.png`：1536×1024 PNG，2,182,750 bytes，SHA-256 `a8f6c83d5759cdc17681ec04ee6034b1a3dd46748718b3322d48ad0f44c9d83c`，与真实 Run 的技术候选图逐字节一致。
+- 独立输出清单 `manifest.json` SHA-256：`cb3460e1ebe5395b054757a9b953057fe6a681a53f114deebd959f82b86bba32`。
+- 第二脚本独立重验源图与导出图完全相同，结果 `PASS`，核验记录 SHA-256 `3e25f62e11b287cafcafdb8f4f0a1e601d24884ab56d1cdd669d6390ae293704`。
+- 相同名称再次导出，实际命令退出码 2；**原有 PNG 与 manifest 未被覆盖**。
+- 对已正式 `BLOCKED` 的 LAMP 历史 Run 实际尝试导出：退出码 2，未建立 exports 目录。
+- 新增 6 项 fixture-only 导出负面/回归单测（总计本地 326 个测试）；独立 GitHub CI 需在 PR #20 最新提交上确认。
+- 以上均属**技术候选可用性**。私有来源权利、人工最终美术、KNIFE_001 权威 Master、正式 Unity 游戏内资产、商业发布仍是 BLOCKED；不能据此宣布 Steam-ready 或 12/30/60 批次完成。
