@@ -234,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     produce.add_argument("--resume", action="store_true")
     produce.add_argument("--max-actions", type=int, default=8)
     produce.add_argument("--codex", help="Existing authenticated Codex executable; no API fallback")
+    produce.add_argument("--export-name", help="On real technical PASS, also output private exports/<name>/")
     export = actions.add_parser("export", help="Copy audited PNG and technical manifest; no Master promotion")
     export.add_argument("--run", required=True, type=Path)
     export.add_argument("--name", required=True, help="Private exports/<name>/, single safe path component")
@@ -265,6 +266,12 @@ def main(argv: list[str] | None = None) -> int:
             asset = _in_workspace(root, args.asset)
             edit = _in_workspace(root, args.edit)
             state_file = _in_workspace(root, args.run or Path("run.json"))
+            if args.export_name is not None:
+                if not EXPORT_NAME_RE.fullmatch(args.export_name):
+                    raise ValidationError("auto-export name is not a safe single path component")
+                candidate_dir = _in_workspace(root, Path("exports") / args.export_name)
+                if candidate_dir.exists() or candidate_dir.is_symlink():
+                    raise ValidationError("auto-export folder already exists")
             if not asset.is_file() or not edit.is_file():
                 raise ValidationError("asset/edit manifest absent")
             # Existing v0.13 engine handles run locking, SHA/Mask/Rcpt,
@@ -280,6 +287,8 @@ def main(argv: list[str] | None = None) -> int:
             if state_file is None:
                 raise ValidationError("run path missing")
         report = summary(state_file)
+        if args.action == "run" and args.export_name and report["technical_audit"] == "PASS":
+            report["export"] = export_technical_candidate(state_file, args.export_name)
         print(json.dumps(report, indent=2, ensure_ascii=False))
         if report["technical_audit"] == "PASS":
             return 0
