@@ -55,7 +55,7 @@ class ProduceEntryTests(unittest.TestCase):
         with redirect_stdout(stream):
             code=cli.main(["--help"])
         self.assertEqual(code,0)
-        self.assertIn("produce run|status",stream.getvalue())
+        self.assertIn("produce check|run|status",stream.getvalue())
 
     def test_status_success_is_only_machine_technical_not_commercial(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,6 +158,46 @@ class ProduceEntryTests(unittest.TestCase):
         code,data=self.run_command(["status"])
         self.assertEqual(code,2)
         self.assertEqual(data["technical_audit"],"BLOCKED")
+
+    def test_readonly_source_check_blocks_missing_knife_references_without_host(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            original=ROOT/"examples/KNIFE_001"
+            (root/"edits").mkdir()
+            shutil.copy2(original/"asset.toml",root/"asset.toml")
+            shutil.copy2(original/"edits/rivets-brushed-silver.toml",
+                         root/"edits/rivets-brushed-silver.toml")
+            with patch.object(simple_produce,"NativeCodexHost") as host, \
+                 patch.object(simple_produce,"drive") as drive:
+                code,data=self.run_command(["check","--workspace-root",str(root),
+                   "--asset","asset.toml","--edit","edits/rivets-brushed-silver.toml"])
+            self.assertEqual(code,2)
+            self.assertEqual(data["technical_preflight"],"BLOCKED")
+            self.assertEqual(data["reason_code"],"edit_target_missing")
+            self.assertEqual(data["selected_reference_count"],2)
+            self.assertEqual([x["reference_id"] for x in data["selected_references"]],
+                             ["ASSEMBLED_MASTER","HANDLE_L_OUTER_MASTER"])
+            self.assertTrue(all(x["status"]=="MISSING_SOURCE"
+                                for x in data["selected_references"]))
+            self.assertEqual(data["codex_imagegen_calls"],0)
+            self.assertFalse(data["run_state_written"])
+            self.assertFalse((root/"run.json").exists())
+            self.assertFalse((root/"run.json.production").exists())
+            host.assert_not_called()
+            drive.assert_not_called()
+
+    def test_source_check_rejects_path_escape_and_never_contacts_host(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            with patch.object(simple_produce,"NativeCodexHost") as host, \
+                 patch.object(simple_produce,"drive") as work:
+                code,data=self.run_command(["check","--workspace-root",str(root),
+                   "--asset","../unsafe/asset.toml","--edit","../unsafe/edit.toml"])
+            self.assertEqual(code,2)
+            self.assertEqual(data["technical_audit"],"BLOCKED")
+            host.assert_not_called()
+            work.assert_not_called()
 
     def test_summary_rejects_unbounded_result_path(self):
         with tempfile.TemporaryDirectory() as tmp:
