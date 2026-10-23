@@ -46,6 +46,11 @@ Codex 原生 ImageGen → SHA 绑定的原生 PNG/Receipt
 ## 3. 单一用户操作入口
 
 ```bash
+# 可选但建议先检查：只读列出所选原图是否缺失，不写 Run、不调用 Codex
+./bin/ai-3dgame-image-harness produce check \
+  --workspace-root /absolute/private/asset-workspace \
+  --asset asset.toml --edit edit.toml
+
 # 一个已有且位于同一工作区的 asset.toml + edit.toml（批准 Master/Mask 的 SHA 固定在合同中）
 ./bin/ai-3dgame-image-harness produce run \
   --workspace-root /absolute/private/asset-workspace \
