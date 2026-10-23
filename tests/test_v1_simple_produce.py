@@ -199,6 +199,82 @@ class ProduceEntryTests(unittest.TestCase):
             host.assert_not_called()
             work.assert_not_called()
 
+    def test_one_run_can_autoexport_only_after_technical_pass(self):
+        """Synthetic-only wrapper fixture; no actual model or approval evidence."""
+        from contextlib import ExitStack
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            args=self.fixture(root)+["--export-name","candidate001"]
+            state=self.accepted_run(root)
+            with ExitStack() as stack:
+                work=stack.enter_context(patch.object(simple_produce,"drive",return_value={"state":"ACCEPTED"}))
+                stack.enter_context(patch.object(simple_produce,"NativeCodexHost",return_value=object()))
+                stack.enter_context(patch.object(simple_produce.execution_loop,"load_run",return_value=state))
+                stack.enter_context(patch.object(simple_produce,"audit_run",return_value={"status":"PASS"}))
+                exporter=stack.enter_context(patch.object(simple_produce,"export_technical_candidate",
+                    return_value={"status":"AUDITED_TECHNICAL_CANDIDATE_ONLY","commercial_release":"BLOCKED"}))
+                code,data=self.run_command(args)
+            self.assertEqual(code,0)
+            self.assertEqual(work.call_count,1)
+            self.assertEqual(exporter.call_count,1)
+            self.assertEqual(exporter.call_args.args[1],"candidate001")
+            self.assertEqual(data["export"]["status"],"AUDITED_TECHNICAL_CANDIDATE_ONLY")
+            self.assertEqual(data["commercial_release"],"BLOCKED")
+            self.assertFalse(data["steam_approved"])
+
+    def test_autoexport_never_runs_on_incomplete_or_blocked_model_job(self):
+        from contextlib import ExitStack
+        for state_name,expected in (("QA_PENDING",3),("BLOCKED",2)):
+            with self.subTest(state=state_name),tempfile.TemporaryDirectory() as temp:
+                root=Path(temp)
+                args=self.fixture(root)+["--export-name","candidate001"]
+                state={"state":state_name,"run_id":"SYNTHETIC","next_action":"visual_qa"}
+                with ExitStack() as stack:
+                    stack.enter_context(patch.object(simple_produce,"drive",return_value={"state":state_name}))
+                    stack.enter_context(patch.object(simple_produce,"NativeCodexHost",return_value=object()))
+                    stack.enter_context(patch.object(simple_produce.execution_loop,"load_run",return_value=state))
+                    exporter=stack.enter_context(patch.object(simple_produce,"export_technical_candidate"))
+                    auditor=stack.enter_context(patch.object(simple_produce,"audit_run"))
+                    code,data=self.run_command(args)
+                self.assertEqual(code,expected)
+                self.assertNotIn("export",data)
+                exporter.assert_not_called()
+                auditor.assert_not_called()
+                self.assertFalse((root/"exports").exists())
+
+    def test_autoexport_unsafe_name_fails_before_any_host_or_run(self):
+        from contextlib import ExitStack
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            args=self.fixture(root)+["--export-name","../ESCAPE"]
+            with ExitStack() as stack:
+                host=stack.enter_context(patch.object(simple_produce,"NativeCodexHost"))
+                worker=stack.enter_context(patch.object(simple_produce,"drive"))
+                code,data=self.run_command(args)
+            self.assertEqual(code,2)
+            self.assertEqual(data["technical_audit"],"BLOCKED")
+            host.assert_not_called()
+            worker.assert_not_called()
+            self.assertFalse((root/"exports").exists())
+
+    def test_autoexport_existing_folder_fails_before_spending_any_model_action(self):
+        from contextlib import ExitStack
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            args=self.fixture(root)+["--export-name","TAKEN"]
+            previous=root/"exports/TAKEN"
+            previous.mkdir(parents=True)
+            marker=previous/"marker.txt"
+            marker.write_text("KEEP_USER_FILE")
+            with ExitStack() as stack:
+                host=stack.enter_context(patch.object(simple_produce,"NativeCodexHost"))
+                worker=stack.enter_context(patch.object(simple_produce,"drive"))
+                code,_=self.run_command(args)
+            self.assertEqual(code,2)
+            host.assert_not_called()
+            worker.assert_not_called()
+            self.assertEqual(marker.read_text(),"KEEP_USER_FILE")
+
     def test_export_isolated_technical_candidate_has_real_png_bytes_and_no_commercial_claim(self):
         """Fixture-only: audit verdict patched to test wrapper; NOT a real imagegen sample."""
         from PIL import Image
