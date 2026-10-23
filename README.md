@@ -11,6 +11,11 @@ Repository: https://github.com/qiguang0916/ai-3dgame-image-harness
 不再要求日常使用者手动串联几十条 Receipt/QA 命令。**唯一推荐入口是 `produce`**，它直接复用现有 Codex ImageGen 执行器和独立生产审计：
 
 ```bash
+# 先只读检查引用原图是否真实存在；不会调用 ImageGen、不会创建 Run
+./bin/ai-3dgame-image-harness produce check \
+  --workspace-root /absolute/private/asset-workspace \
+  --asset asset.toml --edit edit.toml
+
 # 已有经批准 Master/Mask 与 asset.toml、edit.toml 的私人工作区
 ./bin/ai-3dgame-image-harness produce run \
   --workspace-root /absolute/private/asset-workspace \
