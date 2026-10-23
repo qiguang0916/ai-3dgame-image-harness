@@ -29,6 +29,12 @@ Repository: https://github.com/qiguang0916/ai-3dgame-image-harness
 # 只读：自动重新审计已经 ACCEPTED 的真实任务
 ./bin/ai-3dgame-image-harness produce status \
   --run /absolute/private/asset-workspace/run.json
+
+# 仅在原生生产审计 PASS 时导出私有技术候选，不提升 Master
+./bin/ai-3dgame-image-harness produce export \
+  --run /absolute/private/asset-workspace/run.json \
+  --name reviewed-candidate-001
+# 生成 <workspace>/exports/reviewed-candidate-001/candidate.png + manifest.json
 ```
 
 **输出 0=独立技术审计 PASS；3=仍在运行/需继续；2=BLOCKED。** 技术 PASS 仍然不是人工美术、来源版权、正式游戏 Unity/Steam 批准；每种状态单独显示。Codex 使用已登录的 ChatGPT 账号，不引入额外收费图像 API 或本地模型。历史 `autopilot`、`batch`、`precision-compose` 等专业命令仍保留。
