@@ -14,7 +14,7 @@ USAGE = """AI 3D Game Image Harness v0.14-dev (real native production + exact re
 Usage: ai-3dgame-image-harness <command> [options]
 
 Commands:
-  produce run|status      Simple one-job entry: native ImageGen, QA, real audit (noncommercial)
+  produce check|run|status  Check private references, then native ImageGen → QA → real audit
   autopilot run|status      Bounded native Codex subscription production loop
   batch validate|run|status|unity-stage  Audited commercial source / image batch
   batch-benchmark <options> Read-only native batch KPI, confidence intervals (JSON/Markdown)
