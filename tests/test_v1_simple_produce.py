@@ -55,7 +55,7 @@ class ProduceEntryTests(unittest.TestCase):
         with redirect_stdout(stream):
             code=cli.main(["--help"])
         self.assertEqual(code,0)
-        self.assertIn("produce check|run|status",stream.getvalue())
+        self.assertIn("produce check|run|status|export",stream.getvalue())
 
     def test_status_success_is_only_machine_technical_not_commercial(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -198,6 +198,119 @@ class ProduceEntryTests(unittest.TestCase):
             self.assertEqual(data["technical_audit"],"BLOCKED")
             host.assert_not_called()
             work.assert_not_called()
+
+    def test_export_isolated_technical_candidate_has_real_png_bytes_and_no_commercial_claim(self):
+        """Fixture-only: audit verdict patched to test wrapper; NOT a real imagegen sample."""
+        from PIL import Image
+        from simple_produce import sha256_file
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            state=self.accepted_run(root)
+            raw=root/"run.json.production/0000-imagegen_edit/generated.png"
+            Image.new("RGB",(32,24),(75,111,137)).save(raw)
+            state["current_receipt"]["result_sha256"]=sha256_file(raw)
+            state["current_receipt"]["receipt_id"]="SYNTHETIC_FIXTURE_RECEIPT"
+            (root/"run.json").write_text(json.dumps(state))
+            with patch.object(simple_produce.execution_loop,"load_run",return_value=state), \
+                 patch.object(simple_produce,"audit_run",return_value={"status":"PASS"}) as audit, \
+                 patch.object(simple_produce,"NativeCodexHost") as host:
+                code,data=self.run_command(["export","--run",str(root/"run.json"),"--name","RADIO_TEST"])
+            self.assertEqual(code,0)
+            self.assertEqual(data["technical_audit"],"PASS")
+            self.assertEqual(audit.call_count,1)
+            host.assert_not_called()
+            candidate=root/"exports/RADIO_TEST/candidate.png"
+            manifest=root/"exports/RADIO_TEST/manifest.json"
+            self.assertEqual(candidate.read_bytes(),raw.read_bytes())
+            meta=json.loads(manifest.read_text())
+            self.assertEqual(meta["image"]["sha256"],sha256_file(raw))
+            self.assertEqual(meta["image"]["width"],32)
+            self.assertEqual(meta["image"]["height"],24)
+            self.assertEqual(meta["independent_production_audit"],"PASS")
+            self.assertEqual(meta["receipt_id"],"SYNTHETIC_FIXTURE_RECEIPT")
+            self.assertFalse(meta["steam_approved"])
+            self.assertEqual(meta["source_rights"],"NOT_VERIFIED")
+            self.assertEqual(meta["commercial_release"],"BLOCKED")
+            self.assertEqual(meta["human_art_approval"],"REQUIRED_NOT_VERIFIED")
+
+    def test_export_refuses_failed_audit_before_creating_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            state=self.accepted_run(root)
+            (root/"run.json").write_text(json.dumps(state))
+            with patch.object(simple_produce.execution_loop,"load_run",return_value=state), \
+                 patch.object(simple_produce,"audit_run",return_value={
+                     "status":"BLOCKED","failures":["synthetic model provenance missing"]
+                 }):
+                code,data=self.run_command(["export","--run",str(root/"run.json"),"--name","X1"])
+            self.assertEqual(code,2)
+            self.assertEqual(data["technical_audit"],"BLOCKED")
+            self.assertFalse((root/"exports").exists())
+
+    def test_export_refuses_unaudited_fake_png_even_if_report_were_fake_pass(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            state=self.accepted_run(root)
+            (root/"run.json").write_text(json.dumps(state))
+            with patch.object(simple_produce.execution_loop,"load_run",return_value=state), \
+                 patch.object(simple_produce,"audit_run",return_value={"status":"PASS"}):
+                code,data=self.run_command(["export","--run",str(root/"run.json"),"--name","NO"])
+            self.assertEqual(code,2)
+            self.assertFalse((root/"exports").exists())
+
+    def test_export_rejects_unsafe_name_before_touching_workspace(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            state=self.accepted_run(root)
+            for name in ("..","x/y","../outside","a.b","", "x"*100):
+                with self.subTest(name=name),patch.object(
+                    simple_produce.execution_loop,"load_run"
+                ) as read:
+                    code,data=self.run_command([
+                        "export","--run",str(root/"run.json"),"--name",name
+                    ])
+                    self.assertEqual(code,2)
+                    self.assertEqual(data["commercial_release"],"BLOCKED")
+                    read.assert_not_called()
+            self.assertFalse((root/"exports").exists())
+
+    def test_export_refuses_to_overwrite_existing_folder_and_file(self):
+        from PIL import Image
+        from simple_produce import sha256_file
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            state=self.accepted_run(root)
+            raw=root/"run.json.production/0000-imagegen_edit/generated.png"
+            Image.new("RGB",(16,10),(120,60,90)).save(raw)
+            state["current_receipt"]["result_sha256"]=sha256_file(raw)
+            state["current_receipt"]["receipt_id"]="SYNTHETIC"
+            (root/"run.json").write_text(json.dumps(state))
+            preserved=root/"exports/E1"
+            preserved.mkdir(parents=True)
+            (preserved/"candidate.png").write_bytes(b"ORIGINAL_MUST_STAY")
+            with patch.object(simple_produce.execution_loop,"load_run",return_value=state), \
+                 patch.object(simple_produce,"audit_run",return_value={"status":"PASS"}) as audit:
+                code,data=self.run_command(["export","--run",str(root/"run.json"),"--name","E1"])
+            self.assertEqual(code,2)
+            audit.assert_not_called()
+            self.assertEqual((preserved/"candidate.png").read_bytes(),b"ORIGINAL_MUST_STAY")
+            self.assertFalse((preserved/"manifest.json").exists())
+
+    def test_export_refuses_symlinked_export_root_to_outside_workspace(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            work=root/"work"
+            work.mkdir()
+            outside=root/"outside"
+            outside.mkdir()
+            state=self.accepted_run(work)
+            with (work/"run.json").open("w") as f:json.dump(state,f)
+            (work/"exports").symlink_to(outside,target_is_directory=True)
+            with patch.object(simple_produce.execution_loop,"load_run",return_value=state):
+                code,data=self.run_command(["export","--run",str(work/"run.json"),"--name","X1"])
+            self.assertEqual(code,2)
+            self.assertEqual(list(outside.iterdir()),[])
 
     def test_summary_rejects_unbounded_result_path(self):
         with tempfile.TemporaryDirectory() as tmp:
