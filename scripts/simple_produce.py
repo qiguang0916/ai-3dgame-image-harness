@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 import execution_loop
-from artifact_integrity import resolve_in_workspace
+from artifact_integrity import png_metadata, resolve_in_workspace, sha256_file
 from native_codex_host import NativeCodexHost
 from production_audit import audit_run
 from production_autopilot import drive
@@ -117,6 +119,101 @@ def summary(run_path: Path) -> dict[str, Any]:
     return result
 
 
+EXPORT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
+
+
+def export_technical_candidate(run_path: Path, export_name: str) -> dict[str, Any]:
+    """Re-audit a real native Run before writing one immutable technical PNG export.
+
+    Never copies a Master, mutates the Run, promotes a candidate, or reports
+    human/rights/Steam approval. Exports only within the Run's own workspace.
+    """
+    if not isinstance(export_name, str) or not EXPORT_NAME_RE.fullmatch(export_name):
+        raise ValidationError("export name must be a safe single path component")
+    run_path = Path(run_path).expanduser().resolve()
+    state = execution_loop.load_run(run_path)
+    root = Path(state["workspace_root"]).expanduser().resolve()
+    if resolve_in_workspace(root, run_path) != run_path:
+        raise ValidationError("run is not inside its declared workspace")
+
+    exports = resolve_in_workspace(root, "exports")
+    destination = resolve_in_workspace(root, exports / export_name)
+    if (destination.parent != exports or destination.exists()
+            or destination.is_symlink() or destination == root):
+        raise ValidationError("export path is not a new safe workspace folder")
+
+    # Technical output only: no success or copy before actual independent audit.
+    inspected = summary(run_path)
+    if inspected["run_state"] != "ACCEPTED" or inspected["technical_audit"] != "PASS":
+        raise ValidationError("not an independently accepted native image Run")
+
+    source = resolve_in_workspace(root, inspected["output_png"])
+    expected_sha = inspected["output_sha256"]
+    if (not source.is_file() or not expected_sha or
+            sha256_file(source) != expected_sha or source.suffix.lower() != ".png"):
+        raise ValidationError("source PNG vanished or digest differs after audit")
+    info = png_metadata(source)
+    receipt = state["current_receipt"]
+    if (not isinstance(receipt, dict) or receipt.get("result_sha256") != expected_sha
+            or not isinstance(receipt.get("receipt_id"), str)):
+        raise ValidationError("export receipt is not the independently audited output")
+
+    # Exports are write-once and stay in the private Run workspace.
+    exports.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination.mkdir(mode=0o700, exist_ok=False)
+    exported = destination / "candidate.png"
+    with source.open("rb") as src, exported.open("xb") as target:
+        for block in iter(lambda: src.read(1024 * 1024), b""):
+            target.write(block)
+        target.flush()
+        os.fsync(target.fileno())
+    if sha256_file(exported) != expected_sha or sha256_file(source) != expected_sha:
+        raise ValidationError("export source/output altered; partial export is not usable")
+
+    meta = {
+        "schema_version": 1,
+        "status": "AUDITED_TECHNICAL_CANDIDATE_NOT_COMMERCIAL_APPROVAL",
+        "run_id": inspected["run_id"],
+        "run_json_relative": str(run_path.relative_to(root)),
+        "run_json_sha256_at_export": sha256_file(run_path),
+        "receipt_id": receipt["receipt_id"],
+        "image": {
+            "name": "candidate.png",
+            "sha256": expected_sha,
+            "width": info["width"],
+            "height": info["height"],
+            "bytes": info["byte_size"],
+        },
+        "independent_production_audit": "PASS",
+        "machine_visual_qa": inspected["machine_visual_qa"],
+        "source_rights": "NOT_VERIFIED",
+        "human_art_approval": "REQUIRED_NOT_VERIFIED",
+        "unity_in_game": "NOT_VERIFIED",
+        "steam_approved": False,
+        "commercial_release": "BLOCKED",
+        "provenance_note": (
+            "The private Run retains native ImageGen/Mask/Receipt/QA evidence; "
+            "this export only copies the SHA-bound result and does not certify the art."
+        ),
+    }
+    manifest = destination / "manifest.json"
+    with manifest.open("x", encoding="utf8") as out:
+        json.dump(meta, out, indent=2, ensure_ascii=False)
+        out.write("\n")
+        out.flush()
+        os.fsync(out.fileno())
+    return {
+        "status": "AUDITED_TECHNICAL_CANDIDATE_ONLY",
+        "png": str(exported),
+        "sha256": expected_sha,
+        "manifest": str(manifest),
+        "manifest_sha256": sha256_file(manifest),
+        "technical_audit": "PASS",
+        "commercial_release": "BLOCKED",
+        "steam_approved": False,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ai-3dgame-image-harness produce",
@@ -137,6 +234,9 @@ def main(argv: list[str] | None = None) -> int:
     produce.add_argument("--resume", action="store_true")
     produce.add_argument("--max-actions", type=int, default=8)
     produce.add_argument("--codex", help="Existing authenticated Codex executable; no API fallback")
+    export = actions.add_parser("export", help="Copy audited PNG and technical manifest; no Master promotion")
+    export.add_argument("--run", required=True, type=Path)
+    export.add_argument("--name", required=True, help="Private exports/<name>/, single safe path component")
     status = actions.add_parser("status", help="Read-only latest state and re-audit accepted output")
     status.add_argument("--workspace-root", type=Path)
     status.add_argument("--run", type=Path)
@@ -154,6 +254,10 @@ def main(argv: list[str] | None = None) -> int:
             report = inspect_source_inputs(root, asset, edit)
             print(json.dumps(report, indent=2, ensure_ascii=False))
             return 0 if report["technical_preflight"] == "PASS" else 2
+        if args.action == "export":
+            exported = export_technical_candidate(args.run, args.name)
+            print(json.dumps(exported, indent=2, ensure_ascii=False))
+            return 0
         if args.action == "run":
             root = args.workspace_root.expanduser().resolve()
             if not root.is_dir():
