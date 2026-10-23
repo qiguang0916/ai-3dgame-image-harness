@@ -1,10 +1,47 @@
 # AI 3D Game Image Harness
 
-**Current development branch: v0.10 — Commercial Image Batch Production (development, NOT Steam-certified).**
+**当前技术开发：v0.14-dev（Draft PR #20 研发主线），尚不是 Steam 商业交付认证版本。**
 
 This is a Codex/OpenAI **game image production Skill and auditable QA harness**, **not** an image generation model. The official built-in OpenAI `$imagegen` is the sole default image generation/editing backend. No API key, paid fallback, local diffusion model, or GPU inference runtime is introduced by this project.
 
 Repository: https://github.com/qiguang0916/ai-3dgame-image-harness
+
+## 当前推荐：一个命令完成技术素材任务（V2.0 精简方案）
+
+不再要求日常使用者手动串联几十条 Receipt/QA 命令。**唯一推荐入口是 `produce`**，它直接复用现有 Codex ImageGen 执行器和独立生产审计：
+
+```bash
+# 先只读检查引用原图是否真实存在；不会调用 ImageGen、不会创建 Run
+./bin/ai-3dgame-image-harness produce check \
+  --workspace-root /absolute/private/asset-workspace \
+  --asset asset.toml --edit edit.toml
+
+# 已有经批准 Master/Mask 与 asset.toml、edit.toml 的私人工作区
+./bin/ai-3dgame-image-harness produce run \
+  --workspace-root /absolute/private/asset-workspace \
+  --asset asset.toml --edit edit.toml \
+  --export-name candidate-001  # 仅当真实技术审计 PASS 时自动导出
+
+# 需要继续时显式 --resume，绝不自动覆盖有歧义的宿主结果
+./bin/ai-3dgame-image-harness produce run \
+  --workspace-root /absolute/private/asset-workspace \
+  --asset asset.toml --edit edit.toml --resume \
+  --export-name candidate-001
+
+# 只读：自动重新审计已经 ACCEPTED 的真实任务
+./bin/ai-3dgame-image-harness produce status \
+  --run /absolute/private/asset-workspace/run.json
+
+# 仅在原生生产审计 PASS 时导出私有技术候选，不提升 Master
+./bin/ai-3dgame-image-harness produce export \
+  --run /absolute/private/asset-workspace/run.json \
+  --name reviewed-candidate-001
+# 生成 <workspace>/exports/reviewed-candidate-001/candidate.png + manifest.json
+```
+
+**输出 0=独立技术审计 PASS；3=仍在运行/需继续；2=BLOCKED。** 技术 PASS 仍然不是人工美术、来源版权、正式游戏 Unity/Steam 批准；每种状态单独显示。Codex 使用已登录的 ChatGPT 账号，不引入额外收费图像 API 或本地模型。历史 `autopilot`、`batch`、`precision-compose` 等专业命令仍保留。
+
+[查看新的 V2.0 精简开发与交付方案](docs/V2_PRODUCT_SCOPE_RESET_20261022.md)。优先完成一个稳定、方便使用的工具并真实验证 KNIFE_001，12/30/60 权利完整商业批次延后到 v1.x，**不放松安全与商业发布门禁**。
 
 ## 能解决什么
 
